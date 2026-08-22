@@ -1,7 +1,8 @@
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 DEFAULT_MEETUP_GROUPS = [
     "kyoto-tech-meetup",
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     version: str = "0.1.0"
     debug: bool = False
     api_prefix: str = "/api"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
     # --- LLM (matching + pitch) ---
     mistral_api_key: str | None = None
@@ -42,7 +43,7 @@ class Settings(BaseSettings):
     # --- Event sources ---
     doorkeeper_token: str | None = None
     connpass_api_key: str | None = None
-    meetup_groups: list[str] = DEFAULT_MEETUP_GROUPS
+    meetup_groups: Annotated[list[str], NoDecode] = DEFAULT_MEETUP_GROUPS
     http_timeout_s: float = 10.0
     fetch_remote_sources: bool = True
     max_events_for_llm: int = 40
