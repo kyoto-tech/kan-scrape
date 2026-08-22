@@ -209,6 +209,10 @@ code {
   user-select: none;
 }
 
+:root[data-theme='dark'] .talk-button {
+  border: 1px solid #ffffff;
+}
+
 .talk-button:hover {
   background: #1e293b;
   transform: translateY(-2px);
