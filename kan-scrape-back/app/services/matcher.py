@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 MIN_QUERY_CHARS = 3
 TOOL_NAME = "pick_events"
-MIN_PICK = 2
+MIN_PICK = 1
 MAX_PICK = 5
 
 PICK_EVENTS_TOOL: dict[str, Any] = {
@@ -55,7 +55,7 @@ PICK_EVENTS_TOOL: dict[str, Any] = {
 
 SYSTEM_PROMPT = (
     "You are a friendly Kansai (Kyoto/Osaka/Kobe/Nara) events concierge. "
-    "The user tells you what they feel like doing. Pick 2-5 events from the list that fit "
+    "The user tells you what they feel like doing. Pick 1-5 events from the list that fit "
     "best, best first, "
     "and call the tool `pick_events`. Only ever use ids that appear in the list, copied "
     "verbatim including the `source:` prefix (for example `seed:1a2b3c4d5e6f`). "
@@ -74,10 +74,23 @@ def _strip(value: object) -> object:
     return value.strip() if isinstance(value, str) else value
 
 
-class PickEvents(BaseModel):
-    """Validated arguments of the `pick_events` tool call."""
+def _trim_ids(value: object) -> object:
+    """Too many ids is a formatting slip, not a failed match — keep the best few."""
+    if isinstance(value, list):
+        return value[:MAX_PICK]
+    return value
 
-    event_ids: list[str] = Field(min_length=MIN_PICK, max_length=MAX_PICK)
+
+class PickEvents(BaseModel):
+    """Validated arguments of the `pick_events` tool call.
+
+    The tool schema asks the model for `MIN_PICK`-`MAX_PICK` ids; validation here is
+    deliberately looser. An over-long list is truncated rather than rejected, and a single
+    id is accepted: falling back to a random event because the model returned 1 or 6 ids
+    would be a worse answer than the one it actually gave us.
+    """
+
+    event_ids: Annotated[list[str], BeforeValidator(_trim_ids)] = Field(min_length=1)
     # A blank pitch would reach the frontend as `mode="match"` with nothing to speak, and
     # `/speech?text=` then 422s — silence in the demo. Reject it so we retry, then fall back.
     pitch: Annotated[str, BeforeValidator(_strip)] = Field(min_length=1)
@@ -140,18 +153,20 @@ async def call_llm(query: str, events: list[Event], settings: Settings) -> dict[
 
     Kept as a module-level function so tests can monkeypatch it wholesale.
     """
-    client = get_mistral_client(settings)
-    response = await client.chat.complete_async(
-        model=settings.mistral_chat_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_user_prompt(query, events)},
-        ],
-        tools=[PICK_EVENTS_TOOL],
-        tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
-        temperature=0.3,
-        max_tokens=500,
-    )
+    # `async with` closes the SDK's httpx client; a fresh unclosed one per request leaks
+    # sockets across a demo's worth of calls.
+    async with get_mistral_client(settings) as client:
+        response = await client.chat.complete_async(
+            model=settings.mistral_chat_model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": build_user_prompt(query, events)},
+            ],
+            tools=[PICK_EVENTS_TOOL],
+            tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
+            temperature=0.3,
+            max_tokens=500,
+        )
     return _tool_arguments(response)
 
 
@@ -180,7 +195,7 @@ def random_match(
     language: str | None = None,
     apologetic: bool = True,
 ) -> MatchResponse:
-    """Fallback answer: one random upcoming event and a template pitch."""
+    """Fallback answer: a random sample of upcoming events and a template pitch."""
     if not events:
         return MatchResponse(
             transcript=transcript,
@@ -189,14 +204,15 @@ def random_match(
             pitch="I don't have any upcoming events right now — try refreshing in a moment.",
             mode="random",
         )
-    event = random.choice(events)
+    chosen = random.sample(events, k=min(len(events), MAX_PICK))
+    event = chosen[0]
     where = event.city or event.location or "Kansai"
     tail = f"{event.title} on {format_when(event)} in {where}."
     opener = random.choice(_RANDOM_OPENERS) if apologetic else "Here's an idea:"
     return MatchResponse(
         transcript=transcript,
         language=language,
-        events=[event],
+        events=chosen,
         pitch=f"{opener} {tail}",
         mode="random",
     )

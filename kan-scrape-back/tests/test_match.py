@@ -27,7 +27,7 @@ def test_match_text_without_api_key_is_random(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "random"
-    assert len(body["events"]) == 1
+    assert 2 <= len(body["events"]) <= 5
 
 
 def test_match_text_with_mocked_llm(
@@ -47,6 +47,29 @@ def test_match_text_with_mocked_llm(
     assert body["mode"] == "match"
     assert [event["id"] for event in body["events"]] == [known_id]
     assert body["pitch"] == "Go to this one on Friday."
+
+
+def test_match_text_single_event_id_is_a_match(
+    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single confident pick is a match, not a validation failure."""
+    known_id = keyed_client.get("/api/events").json()[0]["id"]
+
+    async def fake_call_llm(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+        return {"event_ids": [known_id], "pitch": "Jazz night in Kobe on Friday."}
+
+    monkeypatch.setattr(matcher, "call_llm", fake_call_llm)
+    body = keyed_client.post("/api/match/text", json={"query": "jazz in Kobe"}).json()
+    assert body["mode"] == "match"
+    assert [event["id"] for event in body["events"]] == [known_id]
+    assert body["pitch"] == "Jazz night in Kobe on Friday."
+
+
+def test_pick_events_accepts_the_one_id_mistral_actually_returns() -> None:
+    picked = matcher.PickEvents.model_validate(
+        {"event_ids": ["seed:1f12dfee13d5"], "pitch": "Jazz night at Sannomiya."}
+    )
+    assert picked.event_ids == ["seed:1f12dfee13d5"]
 
 
 def test_match_text_llm_raising_falls_back_to_random(
@@ -140,7 +163,7 @@ def test_match_voice_empty_transcript_is_random(
         "/api/match/voice", files={"audio": ("clip.webm", b"x", "audio/webm")}
     ).json()
     assert body["mode"] == "random"
-    assert len(body["events"]) == 1
+    assert 2 <= len(body["events"]) <= 5
 
 
 def test_match_voice_stt_raising_is_random(
@@ -211,3 +234,26 @@ def test_resolve_ids_tolerates_missing_prefix() -> None:
     assert matcher.resolve_ids(["seed:abc123"], by_id) == [event]
     assert matcher.resolve_ids(["`seed:abc123`", "seed:abc123"], by_id) == [event]
     assert matcher.resolve_ids(["nope"], by_id) == []
+
+
+def test_match_text_tolerates_too_many_and_too_few_ids(
+    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An off-by-one id count is a formatting slip, not a reason to throw the answer away."""
+    known = [event["id"] for event in keyed_client.get("/api/events").json()[:6]]
+
+    async def too_many(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+        return {"event_ids": known, "pitch": "Six good ones."}
+
+    monkeypatch.setattr(matcher, "call_llm", too_many)
+    body = keyed_client.post("/api/match/text", json={"query": "anything in Kyoto"}).json()
+    assert body["mode"] == "match"
+    assert len(body["events"]) == matcher.MAX_PICK
+
+    async def just_one(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+        return {"event_ids": known[:1], "pitch": "This one."}
+
+    monkeypatch.setattr(matcher, "call_llm", just_one)
+    body = keyed_client.post("/api/match/text", json={"query": "anything in Kyoto"}).json()
+    assert body["mode"] == "match"
+    assert [event["id"] for event in body["events"]] == known[:1]

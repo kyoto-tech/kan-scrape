@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -18,8 +19,8 @@ router = APIRouter(tags=["speech"])
 @router.get("/speech")
 async def speech(
     settings: SettingsDep,
-    text: str = Query(..., min_length=1, max_length=800),
-    voice: str | None = Query(default=None, description="edge-tts voice name"),
+    text: Annotated[str, Query(min_length=1, max_length=800)],
+    voice: Annotated[str | None, Query(description="edge-tts voice name")] = None,
 ) -> StreamingResponse:
     try:
         audio = await synthesize(text, voice or settings.edge_tts_voice)

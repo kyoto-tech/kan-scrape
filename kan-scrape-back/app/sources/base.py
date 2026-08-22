@@ -8,13 +8,25 @@ import re
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from typing import Protocol, runtime_checkable
-from zoneinfo import ZoneInfo
 
-from app.schemas.event import City, Event, Lang
+from app.schemas.event import JST, City, Event, Lang
 
 logger = logging.getLogger(__name__)
 
-JST = ZoneInfo("Asia/Tokyo")
+__all__ = [
+    "JST",
+    "Source",
+    "clean_text",
+    "dedupe",
+    "ensure_aware",
+    "guess_city",
+    "guess_lang",
+    "make_id",
+    "normalise_title",
+    "now_jst",
+    "parse_iso",
+    "upcoming",
+]
 
 _CITY_HINTS: list[tuple[City, tuple[str, ...]]] = [
     ("Kyoto", ("kyoto", "京都", "kawaramachi", "gion", "arashiyama", "uji")),
@@ -112,7 +124,11 @@ def normalise_title(title: str) -> str:
 
 
 def dedupe(events: Iterable[Event]) -> list[Event]:
-    """Drop duplicates sharing a normalised title and start date."""
+    """Drop duplicates sharing a normalised title and start date.
+
+    The *first* occurrence wins, so filter and sort before deduping — otherwise a finished
+    copy of an event can shadow the upcoming one that shares its title and day.
+    """
     seen: set[tuple[str, date]] = set()
     unique: list[Event] = []
     for event in events:
@@ -127,12 +143,12 @@ def dedupe(events: Iterable[Event]) -> list[Event]:
 def upcoming(events: Iterable[Event], *, horizon_days: int | None = None) -> list[Event]:
     """Keep only events that have not started yet, sorted by start time."""
     now = now_jst()
-    limit = now + timedelta(days=horizon_days) if horizon_days else None
+    limit = now + timedelta(days=horizon_days) if horizon_days is not None else None
     kept = [
         event
         for event in events
         if event.starts_at.astimezone(JST) >= now
         and (limit is None or event.starts_at.astimezone(JST) <= limit)
     ]
-    kept.sort(key=lambda event: event.starts_at)
+    kept.sort(key=lambda event: event.starts_at.astimezone(JST))
     return kept

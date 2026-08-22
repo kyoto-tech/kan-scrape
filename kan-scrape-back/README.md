@@ -59,7 +59,7 @@ uv run ruff format . # format
 | GET    | `/api/health`         | Liveness check                                                              |
 | GET    | `/api/events`         | Cached upcoming events. Query: `city` (Kyoto/Osaka/Kobe/Nara/Online), `limit` |
 | POST   | `/api/events/refresh` | Re-run every source adapter → `{count, per_source}`                          |
-| GET    | `/api/events/random`  | One random upcoming event + template pitch (`MatchResponse`, `mode=random`)  |
+| GET    | `/api/events/random`  | A random sample of upcoming events + template pitch (`MatchResponse`, `mode=random`) |
 | POST   | `/api/match/text`     | JSON `{query}` → `MatchResponse` (LLM match, random fallback)                 |
 | POST   | `/api/match/voice`    | multipart `audio` (webm/opus) → STT → `MatchResponse`                         |
 | GET    | `/api/speech`         | `?text=&voice=` → `audio/mpeg` via edge-tts (503 if unavailable)              |
@@ -82,9 +82,13 @@ Adapters live in `app/sources/`, all fail soft (log + return `[]`) and run concu
 | `doorkeeper`    | `DOORKEEPER_TOKEN`  | skipped when the token is missing                             |
 | `connpass`      | `CONNPASS_API_KEY`  | skipped when the key is missing                               |
 
-Results are deduped by (normalised title, start date), filtered to the future and sorted by start
-time. Startup loads the seed synchronously and refreshes the remote adapters in a background task,
-so the app never blocks on the network.
+Results are filtered to the future, sorted by start time and then deduped by (normalised title,
+start date). Startup loads the seed synchronously and refreshes the remote adapters in a background
+task, so the app never blocks on the network.
+
+`POST /api/events/refresh` reports `per_source` as the number of events each adapter *fetched* —
+an adapter health signal, so a 0 means "broken or disabled". `count` is the served total, i.e.
+after dropping past events and duplicates, and is therefore usually smaller than their sum.
 
 ## Configuration
 

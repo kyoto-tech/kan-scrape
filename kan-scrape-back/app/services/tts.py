@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections import OrderedDict
@@ -11,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 MAX_TEXT_CHARS = 800
 CACHE_SIZE = 64
+# edge-tts talks to a Microsoft websocket that can hang instead of failing. Without a
+# deadline the request stalls forever and the frontend never gets its 503 to fall back
+# to browser speechSynthesis.
+TIMEOUT_S = 15.0
 _CACHE: OrderedDict[str, bytes] = OrderedDict()
 
 
@@ -56,10 +61,13 @@ async def synthesize(text: str, voice: str) -> bytes:
 
     chunks: list[bytes] = []
     try:
-        communicate = edge_tts.Communicate(clean, voice)
-        async for chunk in communicate.stream():
-            if chunk.get("type") == "audio" and chunk.get("data"):
-                chunks.append(chunk["data"])
+        async with asyncio.timeout(TIMEOUT_S):
+            communicate = edge_tts.Communicate(clean, voice)
+            async for chunk in communicate.stream():
+                if chunk.get("type") == "audio" and chunk.get("data"):
+                    chunks.append(chunk["data"])
+    except TimeoutError as exc:
+        raise TTSError(f"edge-tts timed out after {TIMEOUT_S:.0f}s") from exc
     except Exception as exc:  # noqa: BLE001 - edge-tts raises a wide family of errors
         raise TTSError(f"edge-tts failed: {exc}") from exc
 

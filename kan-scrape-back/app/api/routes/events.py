@@ -69,5 +69,5 @@ async def refresh_events(store: StoreDep) -> RefreshResponse:
 
 @router.get("/random", response_model=MatchResponse)
 def random_event(store: StoreDep) -> MatchResponse:
-    """One random upcoming event with a template pitch (no LLM involved)."""
+    """A random sample of upcoming events with a template pitch (no LLM involved)."""
     return random_match(store.all(), apologetic=False)

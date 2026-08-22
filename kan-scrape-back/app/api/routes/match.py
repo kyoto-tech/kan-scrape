@@ -36,6 +36,13 @@ async def match_voice(
 ) -> MatchResponse:
     """Transcribe the upload, then match. Any STT failure falls back to a random pick."""
     events = store.all()
+    # Starlette knows the part size after parsing the form, so check it before pulling a
+    # possibly huge spooled file into memory.
+    size = getattr(audio, "size", None)
+    if isinstance(size, int) and size > MAX_AUDIO_BYTES:
+        logger.info("Audio upload too large (%d bytes) — random mode", size)
+        return random_match(events)
+
     try:
         data = await audio.read()
     except Exception:  # noqa: BLE001 - malformed upload must not 500

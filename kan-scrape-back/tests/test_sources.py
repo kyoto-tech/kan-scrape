@@ -205,3 +205,31 @@ async def test_meetup_source_without_slugs() -> None:
     from app.sources.meetup_ical import MeetupICalSource
 
     assert await MeetupICalSource([]).fetch() == []
+
+
+def test_malformed_urls_do_not_drop_the_event() -> None:
+    """A junk image_url costs the field, not the whole event."""
+    payload = {
+        "events": [
+            {
+                "id": 42,
+                "title": "Osaka Go Night",
+                "started_at": "2999-01-01T19:00:00+09:00",
+                "image_url": "not a url",
+                "event_url": "https://connpass.com/event/42/",
+            }
+        ]
+    }
+    events = connpass.parse_events(payload)
+    assert len(events) == 1
+    assert events[0].image_url is None
+    assert str(events[0].url) == "https://connpass.com/event/42/"
+
+
+def test_upcoming_with_zero_horizon_keeps_nothing_later() -> None:
+    """`horizon_days=0` means "nothing after now", not "no horizon at all"."""
+    from app.schemas.event import Event
+
+    later = Event(id="a:1", title="Later", starts_at=now_jst() + timedelta(days=1), source="a")
+    assert upcoming([later], horizon_days=0) == []
+    assert upcoming([later]) == [later]

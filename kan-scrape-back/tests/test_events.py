@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.services.events import EventStore
@@ -56,8 +57,29 @@ def test_random_event(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "random"
-    assert len(body["events"]) == 1
+    assert 2 <= len(body["events"]) <= 5
     assert body["pitch"]
+
+
+def test_random_match_samples_several_distinct_events() -> None:
+    from app.schemas.event import Event
+    from app.services.matcher import MAX_PICK, random_match
+
+    now = now_jst()
+    pool = [
+        Event(
+            id=f"seed:{index}",
+            title=f"Event {index}",
+            starts_at=now + timedelta(days=index + 1),
+            source="seed",
+        )
+        for index in range(10)
+    ]
+    result = random_match(pool, apologetic=False)
+    ids = [event.id for event in result.events]
+    assert 2 <= len(ids) <= MAX_PICK
+    assert len(ids) == len(set(ids))
+    assert set(ids) <= {event.id for event in pool}
 
 
 def test_refresh_without_remote_sources(client: TestClient) -> None:
@@ -91,3 +113,46 @@ def test_no_events_random_is_graceful() -> None:
     assert response.mode == "random"
     assert response.events == []
     assert response.pitch
+
+
+def test_upcoming_copy_survives_a_past_duplicate() -> None:
+    """Dedupe must not let this morning's copy of an event hide tonight's."""
+    from app.schemas.event import Event
+
+    now = now_jst()
+    store = EventStore(remote_sources=[])
+    store.set_seed_events(
+        [
+            Event(id="a:past", title="Same Title", starts_at=now - timedelta(hours=3), source="a"),
+            Event(id="a:next", title="Same Title", starts_at=now + timedelta(hours=3), source="a"),
+        ]
+    )
+    assert [event.id for event in store.all()] == ["a:next"]
+
+
+def test_naive_datetimes_do_not_break_listing() -> None:
+    """A source handing us a naive datetime used to make every read raise TypeError."""
+    from app.schemas.event import Event
+
+    naive = (now_jst() + timedelta(days=2)).replace(tzinfo=None)
+    store = EventStore(remote_sources=[])
+    store.set_seed_events(
+        [
+            Event(id="a:naive", title="Naive", starts_at=naive, source="a"),
+            Event(id="a:aware", title="Aware", starts_at=now_jst() + timedelta(days=1), source="a"),
+        ]
+    )
+    assert [event.id for event in store.all()] == ["a:aware", "a:naive"]
+
+
+def test_store_all_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Whatever goes wrong in the cache, the API serves an empty list rather than a 500."""
+    store = EventStore(remote_sources=[])
+    store.load_seed()
+
+    def boom(*args: object, **kwargs: object) -> list[object]:
+        raise RuntimeError("poisoned cache")
+
+    monkeypatch.setattr("app.services.events.upcoming", boom)
+    assert store.all() == []
+    assert store.count() == 0

@@ -90,8 +90,16 @@ class EventStore:
         return dict(self._per_source)
 
     def all(self, *, city: str | None = None, limit: int | None = None) -> list[Event]:
-        """Deduped, future-only, sorted by start time."""
-        events = upcoming(dedupe([*self._seed_events, *self._remote_events]))
+        """Deduped, future-only, sorted by start time. Never raises — the demo must not 500.
+
+        Filter first, dedupe second: `dedupe` keeps the first match, so running it on the raw
+        list lets a past event shadow the upcoming one it shares a title and day with.
+        """
+        try:
+            events = dedupe(upcoming([*self._seed_events, *self._remote_events]))
+        except Exception:  # noqa: BLE001 - a poisoned cache entry must not take the API down
+            logger.exception("Event cache is unreadable — serving no events")
+            return []
         if city:
             wanted = city.strip().casefold()
             events = [e for e in events if e.city and e.city.casefold() == wanted]
