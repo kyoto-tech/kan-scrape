@@ -69,7 +69,7 @@ def test_match_text_unknown_ids_fall_back_to_random(
     keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def hallucinate(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
-        return {"event_ids": ["nope:1"], "pitch": "made up"}
+        return {"event_ids": ["nope:1", "nope:2"], "pitch": "made up"}
 
     monkeypatch.setattr(matcher, "call_llm", hallucinate)
     body = keyed_client.post("/api/match/text", json={"query": "hiking near Kobe"}).json()
@@ -85,7 +85,7 @@ def test_match_text_blank_pitch_falls_back_to_random(
 
     async def blank_pitch(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
         calls.append(1)
-        return {"event_ids": [known_id], "pitch": "  \n "}
+        return {"event_ids": [known_id, "other:id"], "pitch": "  \n "}
 
     monkeypatch.setattr(matcher, "call_llm", blank_pitch)
     body = keyed_client.post("/api/match/text", json={"query": "jazz night in Osaka"}).json()
@@ -102,7 +102,7 @@ def test_match_text_short_query_is_random(keyed_client: TestClient) -> None:
 def test_match_voice_with_transcript(
     keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    known_id = keyed_client.get("/api/events").json()[0]["id"]
+    ids = [event["id"] for event in keyed_client.get("/api/events").json()[:2]]
 
     async def fake_transcribe(
         data: bytes, filename: str | None = None, content_type: str | None = None
@@ -111,7 +111,7 @@ def test_match_voice_with_transcript(
         return Transcript(text="I want a python meetup in Kyoto", language="en", provider="whisper")
 
     async def fake_call_llm(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
-        return {"event_ids": [known_id], "pitch": "Perfect fit."}
+        return {"event_ids": ids, "pitch": "Perfect fit."}
 
     monkeypatch.setattr("app.services.stt.transcribe", fake_transcribe)
     monkeypatch.setattr(matcher, "call_llm", fake_call_llm)

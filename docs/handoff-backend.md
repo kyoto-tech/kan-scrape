@@ -69,7 +69,7 @@ Match response: `MatchResponse { transcript: str | None, language: str | None, e
 | GET | `/speech?text=&voice=` | edge-tts → `audio/mpeg` (StreamingResponse). Frontend plays the pitch with it. |
 
 Match logic (`app/services/matcher.py`): take up to 40 upcoming events, compact them to `id | title | city | date | tags | 1-line desc`,
-prompt Mistral to call tool `pick_events(event_ids: list[str] (1-3), pitch: str)` — pitch = 1–2 sentences, spoken style,
+prompt Mistral to call tool `pick_events(event_ids: list[str] (2-5), pitch: str)` — pitch = 1–2 sentences, spoken style,
 mentions day + place + why it fits, in the language the user spoke (EN default). Unknown ids → drop. Empty/garbled transcript (<3 chars) or LLM failure → `mode="random"`,
 pitch "I couldn't quite catch that, so here's a surprise: …".
 
