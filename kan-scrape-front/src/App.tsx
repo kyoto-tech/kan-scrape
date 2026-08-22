@@ -257,6 +257,9 @@ function App() {
           </div>
         </section>
       )}
+      <footer className="app-footer">
+        Made with <span aria-label="love">♥</span> by and for the Kyoto Tech Meetup community.
+      </footer>
     </main>
   )
 }
