@@ -308,7 +308,7 @@ code {
 .app-footer {
   width: 100%;
   margin-top: auto;
-  padding-top: 2rem;
+  padding-top: 1.5rem;
   color: var(--text);
   font-size: 0.75rem;
   line-height: 1.4;

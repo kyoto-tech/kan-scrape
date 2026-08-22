@@ -66,6 +66,7 @@ function App() {
   const titleRef = useRef<HTMLHeadingElement | null>(null)
   const introRef = useRef<HTMLParagraphElement | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const footerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = isDarkMode ? 'dark' : 'light'
@@ -80,10 +81,15 @@ function App() {
     intro.from(buttonRef.current, {
       autoAlpha: 0,
       filter: 'blur(16px)',
-      duration: 1.8,
+      duration: 1.35,
       ease: 'power2.out',
       clearProps: 'filter',
     }, '-=0.55')
+    intro.from(footerRef.current, {
+      autoAlpha: 0,
+      duration: 0.7,
+      ease: 'power2.out',
+    }, '+=0.08')
   }, { scope: appRef })
 
   const stopVoiceMeter = () => {
@@ -257,7 +263,7 @@ function App() {
           </div>
         </section>
       )}
-      <footer className="app-footer">
+      <footer ref={footerRef} className="app-footer">
         Made with <span aria-label="love">♥</span> by and for the Kyoto Tech Meetup community.
       </footer>
     </main>
