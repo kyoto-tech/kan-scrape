@@ -2,7 +2,7 @@
 
 Kan Scrape monorepo. The project is organized into independent applications and services that share the same repository.
 
-## Estructura
+## Structure
 
 ```text
 kan-scrape/
@@ -31,8 +31,6 @@ pnpm preview
 ## Project status
 
 The frontend is the first part of the monorepo. The backend implementation will be added soon.
-
-See [TODO.md](./TODO.md) for the upcoming tasks.
 
 ## License
 
