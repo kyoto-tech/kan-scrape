@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Live-verified public iCal feeds (HTTP 200 + VCALENDAR), busiest first.
 DEFAULT_MEETUP_GROUPS = [
+    "kyoto-tech-meetup",
     "local-kyoto-english-meetup",
     "osaka-web-designers-and-developers-meetup",
     "entrepreneurs_tech_ai-careers_venture_capital",

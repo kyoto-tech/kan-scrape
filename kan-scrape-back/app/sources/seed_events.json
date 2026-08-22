@@ -212,20 +212,6 @@
       "description": "Beat the crowds: deer at dawn, the Great Buddha hall, then Kasuga-taisha's lantern paths before lunch in Naramachi."
     },
     {
-      "slug": "kyoto-frontend-friday",
-      "title": "Kyoto Frontend Friday — React & Web Perf",
-      "day_offset": 17,
-      "start_time": "19:30",
-      "duration_min": 120,
-      "location": "Coworking space, Nakagyo-ku, Kyoto",
-      "city": "Kyoto",
-      "tags": ["tech", "frontend", "react", "javascript"],
-      "lang": "mixed",
-      "price": "Free",
-      "url": "https://www.meetup.com/kyoto-tech-meetup/",
-      "description": "Hands-on evening on React server components and Core Web Vitals, with laptops open and a shared repo to hack on."
-    },
-    {
       "slug": "osaka-standup-comedy",
       "title": "English Stand-Up Comedy Night Osaka",
       "day_offset": 18,

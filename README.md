@@ -4,6 +4,10 @@ Kan Scrape is a one-button event finder for Kyoto and the wider Kansai area. The
 records what you say, the backend transcribes the audio with local Whisper, refreshes real
 event sources, and uses Mistral to select the best matches.
 
+<img src="./screenshots/screenshot_1.webp" alt="Kan Scrape initial one-button interface" width="100%" />
+
+<img src="./screenshots/screenshot_2.webp" alt="Kan Scrape event results interface" width="100%" />
+
 ## Repository structure
 
 ```text
@@ -110,7 +114,7 @@ Open the Vite URL, normally [http://localhost:5173](http://localhost:5173). Ensu
 is running and `CORS_ORIGINS` includes the frontend URL.
 
 After installing both applications, you can start the backend and frontend together from the
-repository root:
+repository root. If port 5173 is occupied, Vite automatically selects the next available port:
 
 ```bash
 pnpm dev
