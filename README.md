@@ -7,7 +7,7 @@ Kan Scrape monorepo. The project is organized into independent applications and 
 ```text
 kan-scrape/
 ├── kan-scrape-front/   # Web application (React + TypeScript + Vite)
-└── kan-scrape-back/    # API and backend services (planned)
+└── kan-scrape-back/    # API and backend services (FastAPI + Python)
 ```
 
 ## Local development
@@ -28,11 +28,26 @@ pnpm lint
 pnpm preview
 ```
 
+### Backend
+
+```bash
+cd kan-scrape-back
+uv sync
+uv run uvicorn app.main:app --reload
+```
+
+Available commands:
+
+```bash
+uv run pytest
+uv run ruff check .
+```
+
+See [kan-scrape-back/README.md](./kan-scrape-back/README.md) for details.
+
 ## Project status
 
-The frontend is the first part of the monorepo. The backend implementation will be added soon.
-
-See [TODO.md](./TODO.md) for the upcoming tasks.
+Frontend and backend scaffolds are in place. Scrapers are not wired yet — `/api/events` returns an empty list.
 
 ## License
 
