@@ -2,7 +2,7 @@
 
 Kan Scrape monorepo. The project is organized into independent applications and services that share the same repository.
 
-## Estructura
+## Structure
 
 ```text
 kan-scrape/
