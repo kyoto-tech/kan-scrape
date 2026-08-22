@@ -49,6 +49,12 @@ See [kan-scrape-back/README.md](./kan-scrape-back/README.md) for details.
 
 Frontend and backend scaffolds are in place. Scrapers are not wired yet — `/api/events` returns an empty list.
 
+## Project documentation
+
+- [Design system](./DESIGN.md)
+- [Agent instructions](./AGENTS.md)
+- [Contributing](./CONTRIBUTING.md)
+
 ## License
 
 This project is distributed under the [MIT License](./LICENSE).
