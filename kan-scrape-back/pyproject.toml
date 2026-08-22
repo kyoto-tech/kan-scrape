@@ -10,11 +10,19 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "httpx>=0.28.1",
+    "mistralai>=2.9.4",
+    "icalendar>=7.3.0",
+    "python-multipart>=0.0.32",
+    "faster-whisper>=1.2.1",
+    "edge-tts>=7.2.8",
+    "nvidia-cublas-cu12>=12.9.2.10",
+    "nvidia-cudnn-cu12>=9.24.0.43",
 ]
 
 [dependency-groups]
 dev = [
-    "httpx2>=0.1",
+    "pytest-asyncio>=0.24",
     "pytest>=8.2",
     "ruff>=0.5",
 ]
@@ -35,3 +43,5 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: needs a real model/GPU; set RUN_STT_INTEGRATION=1"]

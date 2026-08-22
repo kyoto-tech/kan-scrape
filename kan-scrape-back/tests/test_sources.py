@@ -1,0 +1,152 @@
+"""Adapter parsing tests — pure string/JSON fixtures, no network."""
+
+from datetime import timedelta
+
+from app.sources import connpass, doorkeeper
+from app.sources.base import dedupe, guess_city, guess_lang, now_jst, upcoming
+from app.sources.meetup_ical import parse_ical
+from app.sources.seed import SeedSource
+
+ICAL_FIXTURE = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Meetup//EN
+BEGIN:VEVENT
+DTSTAMP:20260801T090000Z
+DTSTART;TZID=Asia/Tokyo:20260905T190000
+DTEND;TZID=Asia/Tokyo:20260905T210000
+SUMMARY:Kyoto Tech Meetup #42
+DESCRIPTION:<p>Talks about Python and Go</p>
+LOCATION:Kyoto Research Park\\, Kyoto
+URL:https://www.meetup.com/kyoto-tech-meetup/events/1/
+UID:event-1@meetup.com
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Asia/Tokyo:20260906T100000
+SUMMARY:Osaka Castle Walk
+LOCATION:Osaka Castle Park
+UID:event-2@meetup.com
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Broken event without a start
+UID:event-3@meetup.com
+END:VEVENT
+END:VCALENDAR
+"""
+
+DOORKEEPER_FIXTURE = [
+    {
+        "event": {
+            "id": 12345,
+            "title": "Kyoto Rust Meetup",
+            "starts_at": "2026-09-10T19:00:00.000+09:00",
+            "ends_at": "2026-09-10T21:00:00.000+09:00",
+            "venue_name": "Kyoto Research Park",
+            "address": "Kyoto, Shimogyo-ku",
+            "description": "<p>Rust talks</p>",
+            "public_url": "https://kyoto.doorkeeper.jp/events/12345",
+        }
+    },
+    {"event": {"title": "No start time"}},
+    {"not_an_event": {}},
+]
+
+CONNPASS_FIXTURE = {
+    "results_available": 2,
+    "results_returned": 2,
+    "events": [
+        {
+            "id": 777,
+            "title": "大阪もくもく会",
+            "catch": "もくもく作業しましょう",
+            "started_at": "2026-09-12T13:00:00+09:00",
+            "ended_at": "2026-09-12T17:00:00+09:00",
+            "place": "Umeda, Osaka",
+            "address": "大阪府大阪市北区",
+            "event_url": "https://connpass.com/event/777/",
+            "image_url": "https://connpass.com/image/777.png",
+        },
+        {"title": "no date"},
+    ],
+}
+
+
+def test_parse_ical() -> None:
+    events = parse_ical(ICAL_FIXTURE, "kyoto-tech-meetup")
+    assert len(events) == 2
+    first = events[0]
+    assert first.title == "Kyoto Tech Meetup #42"
+    assert first.starts_at.isoformat().startswith("2026-09-05T19:00")
+    assert first.ends_at is not None
+    assert first.city == "Kyoto"
+    assert first.source == "meetup"
+    assert first.id.startswith("meetup:")
+    assert "<p>" not in (first.description or "")
+    assert events[1].city == "Osaka"
+
+
+def test_parse_ical_garbage_returns_empty() -> None:
+    assert parse_ical("not a calendar at all") == []
+
+
+def test_parse_doorkeeper() -> None:
+    events = doorkeeper.parse_events(DOORKEEPER_FIXTURE, "kyoto")
+    assert len(events) == 1
+    event = events[0]
+    assert event.title == "Kyoto Rust Meetup"
+    assert event.source == "doorkeeper"
+    assert event.city == "Kyoto"
+    assert event.location == "Kyoto Research Park"
+    assert str(event.url).startswith("https://kyoto.doorkeeper.jp/")
+    assert "kyoto" in event.tags
+
+
+def test_parse_doorkeeper_bad_payload() -> None:
+    assert doorkeeper.parse_events({"unexpected": True}) == []
+
+
+def test_parse_connpass() -> None:
+    events = connpass.parse_events(CONNPASS_FIXTURE)
+    assert len(events) == 1
+    event = events[0]
+    assert event.title == "大阪もくもく会"
+    assert event.city == "Osaka"
+    assert event.lang == "ja"
+    assert event.source == "connpass"
+    assert str(event.image_url).endswith("777.png")
+
+
+def test_parse_connpass_bad_payload() -> None:
+    assert connpass.parse_events([1, 2, 3]) == []
+
+
+async def test_disabled_remote_adapters_return_empty() -> None:
+    assert await doorkeeper.DoorkeeperSource(None).fetch() == []
+    assert await connpass.ConnpassSource(None).fetch() == []
+
+
+def test_seed_source_is_relative_to_now() -> None:
+    events = SeedSource().load()
+    assert len(events) >= 15
+    now = now_jst()
+    assert all(event.starts_at > now for event in events)
+    assert all(event.starts_at < now + timedelta(days=40) for event in events)
+    assert len({event.id for event in events}) == len(events)
+    assert {event.city for event in events} >= {"Kyoto", "Osaka", "Kobe"}
+
+
+def test_helpers() -> None:
+    assert guess_city("Sannomiya, Kobe") == "Kobe"
+    assert guess_city("") is None
+    assert guess_lang("完全に日本語のイベント") == "ja"
+    assert guess_lang("A fully English event description here") == "en"
+    events = SeedSource().load()
+    assert dedupe(events + events) == events
+    assert upcoming(events, horizon_days=3) == [
+        e for e in events if e.starts_at <= now_jst() + timedelta(days=3)
+    ]
+
+
+async def test_meetup_source_without_slugs() -> None:
+    from app.sources.meetup_ical import MeetupICalSource
+
+    assert await MeetupICalSource([]).fetch() == []
