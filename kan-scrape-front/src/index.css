@@ -420,6 +420,10 @@ code {
 
 .event-card__description {
   color: #64748b;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
 }
 
 @keyframes spin {
