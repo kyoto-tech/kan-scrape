@@ -9,12 +9,14 @@ event sources, and uses Mistral to select the best matches.
 
 <table>
   <tr>
-    <td width="50%" align="center">
-      <p><em>Initial interface: one focused microphone action with the Kyoto Meetup Finder title.</em></p>
+    <td width="50%" valign="top">
+      <p align="left"><em>Initial interface: one focused microphone action with the Kyoto Meetup Finder title.</em></p>
+      <hr />
       <img src="./screenshots/screenshot_1.webp" alt="Kan Scrape initial one-button interface" width="100%" />
     </td>
-    <td width="50%" align="center">
-      <p><em>Results interface: event cards with dates, categories and links.</em></p>
+    <td width="50%" valign="top">
+      <p align="left"><em>Results interface: event cards with dates, categories and links.</em></p>
+      <hr />
       <img src="./screenshots/screenshot_2.webp" alt="Kan Scrape event results interface" width="100%" />
     </td>
   </tr>
