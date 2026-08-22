@@ -110,7 +110,7 @@ Open the Vite URL, normally [http://localhost:5173](http://localhost:5173). Ensu
 is running and `CORS_ORIGINS` includes the frontend URL.
 
 After installing both applications, you can start the backend and frontend together from the
-repository root:
+repository root. If port 5173 is occupied, Vite automatically selects the next available port:
 
 ```bash
 pnpm dev

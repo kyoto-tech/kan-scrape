@@ -146,8 +146,13 @@ function App() {
       const nextResult = await response.json() as MatchResponse
       setResult(nextResult)
       toast.success(nextResult.mode === 'match' ? 'Meetups found' : 'Here is a surprise pick', { description: nextResult.pitch })
-    } catch {
-      toast.error('Search failed', { description: 'The meetup search could not be completed. Try again.' })
+    } catch (error) {
+      const backendUnavailable = error instanceof TypeError
+      toast.error(backendUnavailable ? 'Backend unavailable' : 'Search failed', {
+        description: backendUnavailable
+          ? `Could not reach ${API_BASE_URL}. Start the backend with pnpm dev and try again.`
+          : 'The meetup search could not be completed. Try again.',
+      })
     } finally {
       setIsSearching(false)
     }
