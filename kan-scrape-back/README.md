@@ -97,12 +97,12 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `WHISPER_COMPUTE_TYPE`  | —                              | e.g. `float16`, `int8`                          |
 | `MLX_WHISPER_REPO`      | —                              | Override the guessed `mlx-community` HF repo    |
 | `STT_MAX_SECONDS`       | `60`                           | Longer clips are rejected with 413              |
-| `STT_WARMUP`            | `true`                         | Load Whisper into VRAM at startup; `false` = lazy |
+| `STT_WARMUP`            | `true`                         | Preload Whisper into VRAM in the background at boot; `false` = lazy |
 | `STT_FALLBACK`          | —                              | `voxtral` to enable the API fallback            |
 | `EDGE_TTS_VOICE`        | `en-US-AvaMultilingualNeural`  | Default `/api/speech` voice                    |
 | `DOORKEEPER_TOKEN`      | —                              | Enables the Doorkeeper adapter                 |
 | `CONNPASS_API_KEY`      | —                              | Enables the Connpass adapter                   |
-| `MEETUP_GROUPS`         | 6 Kansai slugs                 | Comma-separated meetup.com group slugs         |
+| `MEETUP_GROUPS`         | 9 verified Kansai slugs        | Comma-separated meetup.com group slugs         |
 | `HTTP_TIMEOUT_S`        | `10`                           | Per-request timeout for source adapters        |
 | `MAX_EVENTS_FOR_LLM`    | `40`                           | Events shown to the model per match            |
 | `FETCH_REMOTE_SOURCES`  | `true`                         | `false` → seed only, fully offline             |

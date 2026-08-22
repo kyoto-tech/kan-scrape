@@ -6,9 +6,15 @@ from fastapi.testclient import TestClient
 
 # Tests must never touch the network: only the offline seed source is enabled,
 # and the lifespan must not pull the Whisper model in (see docs/handoff-stt.md).
+# Setting the keys to "" instead of popping them matters: pydantic-settings falls back to
+# kan-scrape-back/.env when a variable is absent, so a developer's real key would leak into
+# the test run. An empty environment variable wins over the dotenv file.
 os.environ["FETCH_REMOTE_SOURCES"] = "false"
 os.environ["STT_WARMUP"] = "false"
-os.environ.pop("MISTRAL_API_KEY", None)
+os.environ["MISTRAL_API_KEY"] = ""
+os.environ["DOORKEEPER_TOKEN"] = ""
+os.environ["CONNPASS_API_KEY"] = ""
+os.environ["STT_FALLBACK"] = ""
 
 from app.core.config import get_settings  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -20,6 +26,20 @@ def _fresh_settings() -> Iterator[None]:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_live_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Second net against live Mistral calls; tests that need the LLM path re-patch these."""
+
+    async def _blocked_call(*args: object, **kwargs: object) -> dict[str, object]:
+        raise AssertionError("tests must not call the live Mistral API")
+
+    def _blocked_client(*args: object, **kwargs: object) -> object:
+        raise AssertionError("tests must not build a real Mistral client")
+
+    monkeypatch.setattr("app.services.matcher.call_llm", _blocked_call)
+    monkeypatch.setattr("app.services.matcher.get_mistral_client", _blocked_client)
 
 
 @pytest.fixture

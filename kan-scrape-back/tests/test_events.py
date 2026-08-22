@@ -29,6 +29,28 @@ def test_list_events_filters_and_limits(client: TestClient) -> None:
     assert all(event["city"] == "Kyoto" for event in kyoto)
 
 
+def test_list_events_tolerates_empty_and_odd_limits(client: TestClient) -> None:
+    """URLSearchParams from the frontend emits `?city=&limit=` — that must not 422."""
+    default_count = len(client.get("/api/events").json())
+
+    blank = client.get("/api/events?city=&limit=")
+    assert blank.status_code == 200
+    assert len(blank.json()) == default_count
+
+    zero = client.get("/api/events", params={"limit": 0})
+    assert zero.status_code == 200
+    assert zero.json() == []
+
+    for odd in ("abc", "-5", " "):
+        response = client.get(f"/api/events?limit={odd}")
+        assert response.status_code == 200, odd
+        assert len(response.json()) == default_count
+
+    clamped = client.get("/api/events", params={"limit": 100000})
+    assert clamped.status_code == 200
+    assert len(clamped.json()) <= 500
+
+
 def test_random_event(client: TestClient) -> None:
     response = client.get("/api/events/random")
     assert response.status_code == 200

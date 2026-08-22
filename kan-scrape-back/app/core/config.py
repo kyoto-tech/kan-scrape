@@ -4,13 +4,17 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+# Live-verified public iCal feeds (HTTP 200 + VCALENDAR), busiest first.
 DEFAULT_MEETUP_GROUPS = [
-    "kyoto-tech-meetup",
-    "osaka-international-friends",
-    "kyoto-hiking",
-    "kansai-hikers",
-    "kyoto-english-club",
-    "osaka-running-club",
+    "local-kyoto-english-meetup",
+    "osaka-web-designers-and-developers-meetup",
+    "entrepreneurs_tech_ai-careers_venture_capital",
+    "osaka-friends-english-japanese-language-exchange",
+    "kyoto-language-interaction",
+    "kansaihikes",
+    "Hacker-News-Kansai",
+    "osaka-coffee-and-tech-morning",
+    "Kyoto-Language-Lovers",
 ]
 
 

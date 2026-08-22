@@ -50,10 +50,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.fetch_remote_sources:
         tasks.append(asyncio.create_task(store.refresh(), name="events-refresh"))
 
-    # Blocking on purpose: the server should not report itself ready until Whisper can
-    # answer, so the first /api/transcribe never pays the model load. STT_WARMUP=false
-    # restores lazy loading (tests use that). Never raises — a dead model just means 503s.
-    await _warmup_stt()
+    # Preload Whisper into VRAM, but off the startup path: the model loads on a daemon
+    # thread (see app/services/stt.py) so Ctrl-C during the 30-120s cold load exits at once
+    # instead of waiting for it. /api/transcribe/status reports when the model is ready;
+    # a request arriving earlier simply waits for the same load. STT_WARMUP=false = lazy.
+    tasks.append(asyncio.create_task(_warmup_stt(), name="stt-warmup"))
 
     try:
         yield
