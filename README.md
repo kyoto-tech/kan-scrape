@@ -32,6 +32,12 @@ pnpm preview
 
 The frontend is the first part of the monorepo. The backend implementation will be added soon.
 
+## Project documentation
+
+- [Design system](./DESIGN.md)
+- [Agent instructions](./AGENTS.md)
+- [Contributing](./CONTRIBUTING.md)
+
 ## License
 
 This project is distributed under the [MIT License](./LICENSE).
