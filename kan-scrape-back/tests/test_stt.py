@@ -208,11 +208,18 @@ def test_route_rejects_empty_upload(client: TestClient, monkeypatch: pytest.Monk
 
 def test_route_rejects_oversize_upload(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _use(monkeypatch, Transcript(text="unused"))
-    blob = b"0" * (10 * 1024 * 1024 + 1)
+    # Shrunk from the real 10 MB so the test does not push a huge multipart body.
+    monkeypatch.setattr("app.api.routes.transcribe.MAX_AUDIO_BYTES", 8)
 
-    response = client.post("/api/transcribe", files={"audio": ("c.webm", blob, "audio/webm")})
+    response = client.post("/api/transcribe", files={"audio": ("c.webm", b"0" * 9, "audio/webm")})
 
     assert response.status_code == 413
+
+
+def test_the_advertised_upload_limit_is_10_mb() -> None:
+    from app.api.routes import transcribe as route
+
+    assert route.MAX_AUDIO_BYTES == 10 * 1024 * 1024
 
 
 def test_route_rejects_too_long_clip(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

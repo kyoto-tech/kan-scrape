@@ -4,8 +4,10 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-# Tests must never touch the network: only the offline seed source is enabled.
+# Tests must never touch the network: only the offline seed source is enabled,
+# and the lifespan must not pull the Whisper model in (see docs/handoff-stt.md).
 os.environ["FETCH_REMOTE_SOURCES"] = "false"
+os.environ["STT_WARMUP"] = "false"
 os.environ.pop("MISTRAL_API_KEY", None)
 
 from app.core.config import get_settings  # noqa: E402

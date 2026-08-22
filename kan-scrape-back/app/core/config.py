@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     stt_fallback: str | None = None  # None | "voxtral"
     voxtral_model: str = "voxtral-mini-latest"
     stt_max_seconds: int = 60
+    stt_warmup: bool = True  # False keeps the model unloaded until the first request
 
     # --- TTS ---
     edge_tts_voice: str = "en-US-AvaMultilingualNeural"

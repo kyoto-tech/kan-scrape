@@ -83,6 +83,9 @@ class SpeechToText:
 
     async def warmup(self) -> None:
         """Load the model. Idempotent, never raises — `ready` stays False on failure."""
+        if not self._settings.stt_warmup:
+            logger.info("STT warmup disabled; the model loads on the first request")
+            return
         try:
             await self._ensure_model()
         except Exception:  # noqa: BLE001 - startup must survive a broken model

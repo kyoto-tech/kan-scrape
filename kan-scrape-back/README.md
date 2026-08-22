@@ -75,6 +75,7 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `WHISPER_DEVICE`        | `auto`                         | `auto` \| `cuda` \| `cpu`                       |
 | `WHISPER_COMPUTE_TYPE`  | —                              | e.g. `float16`, `int8`                          |
 | `STT_MAX_SECONDS`       | `60`                           | Longer clips are rejected with 413              |
+| `STT_WARMUP`            | `true`                         | Preload Whisper at startup (background task)    |
 | `STT_FALLBACK`          | —                              | `voxtral` to enable the API fallback            |
 | `EDGE_TTS_VOICE`        | `en-US-AvaMultilingualNeural`  | Default `/api/speech` voice                    |
 | `DOORKEEPER_TOKEN`      | —                              | Enables the Doorkeeper adapter                 |
