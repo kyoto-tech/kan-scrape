@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from app.sources import connpass, doorkeeper
-from app.sources.base import dedupe, guess_city, guess_lang, now_jst, upcoming
+from app.sources.base import dedupe, guess_city, guess_lang, make_id, now_jst, upcoming
 from app.sources.meetup_ical import parse_ical
 from app.sources.seed import SeedSource
 
@@ -82,6 +82,61 @@ def test_parse_ical() -> None:
     assert first.id.startswith("meetup:")
     assert "<p>" not in (first.description or "")
     assert events[1].city == "Osaka"
+
+
+REAL_ICAL_FIXTURE = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Meetup//Meetup Calendar 1.0//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+NAME:OKTech - Tackle tech together in Kansai
+X-WR-CALNAME:OKTech - Tackle tech together in Kansai
+BEGIN:VTIMEZONE
+TZID:Asia/Tokyo
+X-LIC-LOCATION:Asia/Tokyo
+BEGIN:STANDARD
+TZOFFSETFROM:+0900
+TZOFFSETTO:+0900
+TZNAME:JST
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:event_314843745@meetup.com
+SEQUENCE:1
+DTSTAMP:20260822T054327Z
+DTSTART;TZID=Asia/Tokyo:20260829T170000
+DTEND;TZID=Asia/Tokyo:20260829T200000
+SUMMARY:Git Workshop Day
+DESCRIPTION:OKTech - Tackle tech together in Kansai\\nGrab your laptop and 
+ join us to level up your skills!\\n\\nGit is the backbone of modern software
+  development\\, yet many people still only scratch the surface.
+URL;VALUE=URI:https://www.meetup.com/oktech/events/314843745/
+STATUS:CONFIRMED
+CLASS:PUBLIC
+END:VEVENT
+END:VCALENDAR
+"""
+
+
+def test_parse_ical_real_meetup_feed() -> None:
+    """Shape of a live Meetup feed: TZID start, no LOCATION, folded/escaped description,
+    `URL;VALUE=URI` whose urlname differs from the feed slug, `event_<id>@meetup.com` uid."""
+    events = parse_ical(REAL_ICAL_FIXTURE, "osaka-web-designers-and-developers-meetup")
+    assert len(events) == 1
+    event = events[0]
+    assert event.title == "Git Workshop Day"
+    assert event.starts_at.isoformat() == "2026-08-29T17:00:00+09:00"
+    assert event.ends_at is not None
+    assert event.location is None
+    # City falls back to the calendar name / feed slug when the event carries no location.
+    assert event.city == "Osaka"
+    assert str(event.url) == "https://www.meetup.com/oktech/events/314843745/"
+    assert event.id == make_id("meetup", "event_314843745@meetup.com")
+    description = event.description or ""
+    assert "\\n" not in description and "\\," not in description
+    assert "Grab your laptop and join us" in description
+    assert "many people still only scratch the surface" in description
 
 
 def test_parse_ical_garbage_returns_empty() -> None:

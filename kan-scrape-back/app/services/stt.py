@@ -20,6 +20,9 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
+from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Literal
 
@@ -49,6 +52,34 @@ class AudioTooLongError(SttError):
 
 #: Devices that mean "use the machine's GPU". Everything else falls back to CPU/int8.
 _GPU_DEVICES = frozenset({"cuda", "mlx"})
+
+
+async def _in_daemon_thread(func: Callable[[], object]) -> object:
+    """Like `asyncio.to_thread`, but on a daemon thread.
+
+    The model load takes 30-120s on a cold cache, and the default executor's threads are
+    joined on interpreter exit — so a Ctrl-C during the load would otherwise block until the
+    weights finished loading. A daemon thread lets the process die immediately instead.
+    """
+    loop = asyncio.get_running_loop()
+    future: asyncio.Future[object] = loop.create_future()
+
+    def _settle(setter: Callable[[object], None], value: object) -> None:
+        if not future.done():
+            setter(value)
+
+    def _runner() -> None:
+        try:
+            result = func()
+        except BaseException as exc:  # noqa: BLE001 - forwarded to the awaiting coroutine
+            with suppress(RuntimeError):  # loop already closed: nobody is waiting
+                loop.call_soon_threadsafe(_settle, future.set_exception, exc)
+        else:
+            with suppress(RuntimeError):
+                loop.call_soon_threadsafe(_settle, future.set_result, result)
+
+    threading.Thread(target=_runner, name="whisper-load", daemon=True).start()
+    return await future
 
 
 def _is_apple_silicon() -> bool:
@@ -170,7 +201,7 @@ class SpeechToText:
             return self._model
         async with self._load_lock:
             if self._model is None:
-                self._model = await asyncio.to_thread(self._load_model)
+                self._model = await _in_daemon_thread(self._load_model)
         return self._model
 
     def _load_model(self) -> object:
@@ -303,7 +334,7 @@ class SpeechToText:
             self._force_cpu = True
             self._model = None
             try:
-                self._model = await asyncio.to_thread(self._load_model)
+                self._model = await _in_daemon_thread(self._load_model)
             except Exception:  # noqa: BLE001 - nothing left to try
                 logger.warning("CPU reload failed", exc_info=True)
                 return None

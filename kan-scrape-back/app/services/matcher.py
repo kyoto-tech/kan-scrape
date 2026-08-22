@@ -6,9 +6,9 @@ import asyncio
 import json
 import logging
 import random
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, BeforeValidator, Field, ValidationError
 
 from app.schemas.event import Event, MatchResponse
 from app.sources.base import JST
@@ -38,6 +38,7 @@ PICK_EVENTS_TOOL: dict[str, Any] = {
                 },
                 "pitch": {
                     "type": "string",
+                    "minLength": 1,
                     "description": (
                         "One or two sentences, spoken style, mentioning the day, the place "
                         "and why it fits. Same language as the user."
@@ -66,11 +67,17 @@ _RANDOM_OPENERS = [
 ]
 
 
+def _strip(value: object) -> object:
+    return value.strip() if isinstance(value, str) else value
+
+
 class PickEvents(BaseModel):
     """Validated arguments of the `pick_events` tool call."""
 
     event_ids: list[str] = Field(min_length=1, max_length=3)
-    pitch: str
+    # A blank pitch would reach the frontend as `mode="match"` with nothing to speak, and
+    # `/speech?text=` then 422s — silence in the demo. Reject it so we retry, then fall back.
+    pitch: Annotated[str, BeforeValidator(_strip)] = Field(min_length=1)
 
 
 def format_when(event: Event) -> str:
@@ -225,7 +232,7 @@ async def match(
                 transcript=transcript,
                 language=language,
                 events=chosen,
-                pitch=picked.pitch.strip(),
+                pitch=picked.pitch,
                 mode="match",
             )
         except (ValidationError, ValueError, KeyError, json.JSONDecodeError) as exc:

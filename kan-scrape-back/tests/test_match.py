@@ -76,6 +76,24 @@ def test_match_text_unknown_ids_fall_back_to_random(
     assert body["mode"] == "random"
 
 
+def test_match_text_blank_pitch_falls_back_to_random(
+    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty pitch would leave the frontend with nothing to speak — treat it as a failure."""
+    known_id = keyed_client.get("/api/events").json()[0]["id"]
+    calls: list[int] = []
+
+    async def blank_pitch(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+        calls.append(1)
+        return {"event_ids": [known_id], "pitch": "  \n "}
+
+    monkeypatch.setattr(matcher, "call_llm", blank_pitch)
+    body = keyed_client.post("/api/match/text", json={"query": "jazz night in Osaka"}).json()
+    assert body["mode"] == "random"
+    assert body["pitch"]
+    assert len(calls) == 2  # retried once before giving up
+
+
 def test_match_text_short_query_is_random(keyed_client: TestClient) -> None:
     body = keyed_client.post("/api/match/text", json={"query": "a"}).json()
     assert body["mode"] == "random"

@@ -21,7 +21,7 @@ from app.sources.base import (
 logger = logging.getLogger(__name__)
 
 ICAL_URL = "https://www.meetup.com/{slug}/events/ical/"
-USER_AGENT = "kan-scrape/0.1 (+https://github.com/) python-httpx"
+USER_AGENT = "Mozilla/5.0 (compatible; kan-scrape/0.1)"
 
 
 def _component_str(component: Any, key: str) -> str | None:
@@ -38,6 +38,11 @@ def parse_ical(payload: str | bytes, slug: str = "meetup") -> list[Event]:
     except Exception:  # noqa: BLE001 - third-party parser, any failure is "no events"
         logger.warning("Unparseable iCal feed for %s", slug)
         return []
+
+    # Meetup VEVENTs frequently carry no LOCATION, so the calendar name ("OKTech - Tackle
+    # tech together in Kansai") and the feed slug are the only city hints left.
+    group_name = _component_str(calendar, "X-WR-CALNAME") or _component_str(calendar, "NAME")
+    slug_hint = slug.replace("-", " ").replace("_", " ")
 
     events: list[Event] = []
     for component in calendar.walk("VEVENT"):
@@ -61,7 +66,11 @@ def parse_ical(payload: str | bytes, slug: str = "meetup") -> list[Event]:
                     url=url if url and url.startswith("http") else None,
                     source="meetup",
                     description=description,
-                    city=guess_city(location, title, description) or "Other",
+                    city=(
+                        guess_city(location, title, description)
+                        or guess_city(group_name, slug_hint)
+                        or "Other"
+                    ),
                     tags=["meetup", slug],
                     lang=guess_lang(title, description),
                 )
