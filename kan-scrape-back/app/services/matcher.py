@@ -209,8 +209,9 @@ def is_kyoto_tech_meetup(event: Event) -> bool:
 
 def prioritize_community_event(events: list[Event]) -> list[Event]:
     """Keep Kyoto Tech Meetup first, even when the response reaches the five-event cap."""
-    featured = [event for event in events if is_kyoto_tech_meetup(event)]
-    remaining = [event for event in events if not is_kyoto_tech_meetup(event)]
+    unique = list({event.id: event for event in events}.values())
+    featured = [event for event in unique if is_kyoto_tech_meetup(event)]
+    remaining = [event for event in unique if not is_kyoto_tech_meetup(event)]
     return (featured + remaining)[:MAX_PICK]
 
 
@@ -293,10 +294,11 @@ async def match(
             chosen = resolve_ids(picked.event_ids, by_id)
             if not chosen:
                 raise ValueError("LLM returned no known event ids")
+            featured_candidates = [event for event in candidates if is_kyoto_tech_meetup(event)]
             return MatchResponse(
                 transcript=transcript,
                 language=language,
-                events=prioritize_community_event(chosen),
+                events=prioritize_community_event(featured_candidates[:1] + chosen),
                 pitch=picked.pitch,
                 mode="match",
             )

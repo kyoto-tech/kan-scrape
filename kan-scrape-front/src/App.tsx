@@ -245,7 +245,7 @@ function App() {
                 <div className="event-card__content">
                   <div className="event-card__labels">
                     <p className="event-card__category">{titleCase(event.tags[0] ?? event.source)}</p>
-                    {isKyotoTechMeetup(event) && <span className="event-card__featured-badge">★ Starred</span>}
+                    {isKyotoTechMeetup(event) && <span className="event-card__featured-badge" aria-label="Kyoto Tech Meetup" title="Kyoto Tech Meetup">★</span>}
                   </div>
                   <h2>{event.title}</h2>
                   <p className="event-card__meta">{event.location ?? event.city ?? 'Kansai'} · {timeFormatter.format(new Date(event.starts_at))}</p>

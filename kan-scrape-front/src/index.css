@@ -342,7 +342,7 @@ code {
   display: inline-flex;
   width: fit-content;
   margin: 0 0 0.5rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 9999px;
   color: var(--accent);
   background: var(--accent-bg);
@@ -388,12 +388,10 @@ code {
 .event-card__featured-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--accent);
+  padding: 0;
   border-radius: 9999px;
   color: var(--accent);
-  background: var(--accent-bg);
-  font-size: 0.65rem;
+  font-size: 1rem;
   font-weight: 800;
 }
 
