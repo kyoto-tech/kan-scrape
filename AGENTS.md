@@ -2,7 +2,7 @@
 
 ## Repository
 
-`kan-scrape` is a monorepo for the Kyoto Tech Meetup community experience. The frontend currently lives in `kan-scrape-front/`; backend services will be added under a separate root directory when implemented.
+`kan-scrape` is a monorepo for the Kyoto Tech Meetup community experience. The frontend lives in `kan-scrape-front/`, the backend (FastAPI) in `kan-scrape-back/`.
 
 Read [`DESIGN.md`](./DESIGN.md) before changing visual tokens, typography, colors, spacing, responsive behavior, or interaction states. Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before contributing.
 
@@ -19,12 +19,27 @@ The frontend is self-contained in `kan-scrape-front/`. Run frontend commands fro
 
 ### Backend
 
-The backend is not implemented yet. Do not create backend conventions or dependencies until the backend stack is chosen and documented.
+- Python 3.12, FastAPI, uv (deps + lockfile), ruff, pytest
+- Event sources: seed fixture (always on), Meetup iCal, Doorkeeper / Connpass (optional API keys)
+- Matching + pitch: Mistral (`MISTRAL_API_KEY`, function calling); STT: local faster-whisper (GPU); TTS: edge-tts
+- Spec: [`docs/handoff-backend.md`](./docs/handoff-backend.md), STT: [`docs/handoff-stt.md`](./docs/handoff-stt.md); endpoints in [`kan-scrape-back/README.md`](./kan-scrape-back/README.md)
+
+Run from `kan-scrape-back/`:
+
+```bash
+uv sync
+cp .env.example .env            # add MISTRAL_API_KEY for /match (app boots without it: random mode only)
+uv run uvicorn app.main:app --reload   # http://localhost:8000 — docs at /docs, API under /api
+uv run pytest -q                # offline, no network/keys needed
+uv run ruff check . && uv run ruff format --check .
+```
+
+Quick check: `curl -s -X POST localhost:8000/api/events/refresh` then `curl -s 'localhost:8000/api/events?limit=3'`.
 
 ## Repository conventions
 
 - Keep frontend code inside `kan-scrape-front/`.
-- Add backend code in a clearly named root-level directory such as `kan-scrape-back/` once it exists.
+- Keep backend code inside `kan-scrape-back/`.
 - Keep app-specific package files and lockfile ownership clear.
 - Prefer small, focused changes and preserve unrelated work.
 - Update documentation when a shared architecture, token, or workflow changes.
@@ -49,6 +64,8 @@ pnpm install
 pnpm lint
 pnpm build
 ```
+
+From `kan-scrape-back/`: `uv run pytest -q && uv run ruff check .`
 
 For visual changes, verify narrow mobile, tablet, and desktop layouts, including long labels, focus-visible states, and reduced motion.
 
