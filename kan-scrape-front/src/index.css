@@ -365,12 +365,15 @@ code {
 .results-pitch {
   margin: 0 0 1rem;
   padding: 0.875rem 1rem;
-  border: 1px solid var(--accent);
   border-radius: 0.75rem;
-  color: var(--text-h);
-  background: var(--accent-bg);
+  color: #ffffff;
+  background: var(--accent);
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+:root[data-theme='dark'] .results-pitch {
+  background: var(--accent-border);
 }
 
 .event-card__labels {
