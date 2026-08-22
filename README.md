@@ -109,6 +109,32 @@ pnpm dev
 Open the Vite URL, normally [http://localhost:5173](http://localhost:5173). Ensure the backend
 is running and `CORS_ORIGINS` includes the frontend URL.
 
+After installing both applications, you can start the backend and frontend together from the
+repository root:
+
+```bash
+pnpm dev
+```
+
+For testing from a phone on the same Wi-Fi network:
+
+```bash
+pnpm dev:lan
+```
+
+Stop both services with `Ctrl+C`.
+
+To test from a phone on the same Wi-Fi network, start Vite on the LAN interface:
+
+```bash
+pnpm dev -- --host 0.0.0.0
+```
+
+Then set the computer's LAN address in `kan-scrape-back/.env`, for example
+`CORS_ORIGINS=http://192.168.1.20:5173`, restart the backend, and open
+`http://192.168.1.20:5173` on the phone. Do not use `localhost` on the phone because it refers
+to the phone itself.
+
 ### 7. Run the checks
 
 ```bash

@@ -5,7 +5,9 @@ import { useRef, useState, type CSSProperties } from 'react'
 
 gsap.registerPlugin(useGSAP)
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000').replace(/\/$/, '')
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:8000`
+).replace(/\/$/, '')
 
 type ApiEvent = {
   id: string
@@ -158,7 +160,21 @@ function App() {
 
   return (
     <main ref={appRef} className="app-shell">
-      <Toaster position="top-right" theme="light" richColors toastOptions={{ duration: 4200 }} />
+      <Toaster
+        position="top-right"
+        theme="light"
+        richColors
+        toastOptions={{
+          duration: 4200,
+          classNames: {
+            toast: 'kan-toast',
+            content: 'kan-toast__content',
+            title: 'kan-toast__title',
+            description: 'kan-toast__description',
+            icon: 'kan-toast__icon',
+          },
+        }}
+      />
       <h1 ref={titleRef}>Kyoto Meetup Finder</h1>
       <p ref={introRef} className="intro">Speak into the microphone to find the best meetup events.</p>
       <button

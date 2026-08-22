@@ -108,11 +108,12 @@ code {
 }
 
 .app-shell {
-  width: min(100% - 24px, 48rem);
+  width: min(calc(100% - 2rem), 48rem);
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
   padding: 1.5rem 0;
+  box-sizing: border-box;
 }
 
 .eyebrow {
@@ -127,10 +128,13 @@ code {
   color: var(--text-h);
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .intro {
   max-width: 32rem;
+  width: 100%;
   margin: 0;
   color: var(--text);
   font-size: 0.95rem;
@@ -224,11 +228,15 @@ code {
 }
 
 .kan-toast {
+  display: flex !important;
   align-items: flex-start !important;
   text-align: left !important;
 }
 
 .kan-toast__content {
+  display: flex !important;
+  flex: 1 !important;
+  justify-content: flex-start !important;
   align-items: flex-start !important;
   text-align: left !important;
 }
@@ -239,8 +247,14 @@ code {
 }
 
 .kan-toast__icon {
+  display: flex !important;
   align-self: flex-start !important;
   margin-top: 0.15rem !important;
+}
+
+.kan-toast [data-title],
+.kan-toast [data-description] {
+  text-align: left !important;
 }
 
 .results-panel {
@@ -335,12 +349,14 @@ code {
 
 @media (max-width: 639px) {
   .app-shell {
-    width: 100%;
-    padding-inline: 1rem;
+    width: calc(100% - 2rem);
+    padding-inline: 0;
   }
 
   .talk-button {
-    width: 100%;
+    width: min(100%, 22rem);
+    max-width: 100%;
+    padding-inline: 1rem;
   }
 
   .results-panel {
