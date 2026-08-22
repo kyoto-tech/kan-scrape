@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 MIN_QUERY_CHARS = 3
 TOOL_NAME = "pick_events"
+MIN_PICK = 2
+MAX_PICK = 5
 
 PICK_EVENTS_TOOL: dict[str, Any] = {
     "type": "function",
@@ -32,8 +34,8 @@ PICK_EVENTS_TOOL: dict[str, Any] = {
                 "event_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "minItems": 1,
-                    "maxItems": 3,
+                    "minItems": MIN_PICK,
+                    "maxItems": MAX_PICK,
                     "description": "Ids of the best matching events, best first.",
                 },
                 "pitch": {
@@ -53,7 +55,8 @@ PICK_EVENTS_TOOL: dict[str, Any] = {
 
 SYSTEM_PROMPT = (
     "You are a friendly Kansai (Kyoto/Osaka/Kobe/Nara) events concierge. "
-    "The user tells you what they feel like doing. Pick 1-3 events from the list that fit best "
+    "The user tells you what they feel like doing. Pick 2-5 events from the list that fit "
+    "best, best first, "
     "and call the tool `pick_events`. Only ever use ids that appear in the list, copied "
     "verbatim including the `source:` prefix (for example `seed:1a2b3c4d5e6f`). "
     "The pitch is read aloud: 1-2 sentences, warm and concrete, mention the weekday, the place "
@@ -74,7 +77,7 @@ def _strip(value: object) -> object:
 class PickEvents(BaseModel):
     """Validated arguments of the `pick_events` tool call."""
 
-    event_ids: list[str] = Field(min_length=1, max_length=3)
+    event_ids: list[str] = Field(min_length=MIN_PICK, max_length=MAX_PICK)
     # A blank pitch would reach the frontend as `mode="match"` with nothing to speak, and
     # `/speech?text=` then 422s — silence in the demo. Reject it so we retry, then fall back.
     pitch: Annotated[str, BeforeValidator(_strip)] = Field(min_length=1)
@@ -108,7 +111,7 @@ def build_user_prompt(query: str, events: list[Event]) -> str:
         f"User request: {query.strip()}\n\n"
         "Upcoming events (id | title | city | date | tags | description):\n"
         f"{lines}\n\n"
-        f"Call {TOOL_NAME} with the 1-3 best ids and a spoken pitch."
+        f"Call {TOOL_NAME} with the {MIN_PICK}-{MAX_PICK} best ids (best first) and a spoken pitch."
     )
 
 
