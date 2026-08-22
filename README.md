@@ -198,6 +198,7 @@ For the complete endpoint and configuration reference, see
 - [Design system](./DESIGN.md)
 - [Agent instructions](./AGENTS.md)
 - [Contributing](./CONTRIBUTING.md)
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
 
 ## License
 
