@@ -110,6 +110,24 @@ def _resolve_device(settings: Settings) -> list[tuple[str, str]]:
     return [pair("cuda"), pair("cpu")]
 
 
+#: faster-whisper model name -> mlx-community HF repo. The naming there is not a pattern:
+#: turbo dropped the `-mlx` suffix that the others kept, so guessing gets you a 404.
+#: Verified against the HF API — each repo holds a config.json plus MLX weights.
+MLX_REPOS = {
+    "tiny": "mlx-community/whisper-tiny-mlx",
+    "base": "mlx-community/whisper-base-mlx",
+    "small": "mlx-community/whisper-small-mlx",
+    "medium": "mlx-community/whisper-medium-mlx",
+    "large-v3": "mlx-community/whisper-large-v3-mlx",
+    "large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
+    "turbo": "mlx-community/whisper-turbo",
+}
+
+#: Used when the configured model has no mlx-community counterpart. Matches the default
+#: WHISPER_MODEL, so the two backends transcribe with the same model out of the box.
+MLX_DEFAULT_REPO = "mlx-community/whisper-large-v3-turbo"
+
+
 class _MlxSegment:
     """faster-whisper-shaped segment."""
 
@@ -236,15 +254,17 @@ class SpeechToText:
         return self._build(WhisperModel, name, device, compute_type)
 
     def _mlx_repo(self) -> str:
-        """Map the faster-whisper model name onto an mlx-community HF repo.
-
-        Not every faster-whisper name has an mlx-community counterpart, so `MLX_WHISPER_REPO`
-        overrides this outright.
-        """
-        if self._settings.mlx_whisper_repo:
-            return self._settings.mlx_whisper_repo
+        """Map the configured model name onto an mlx-community HF repo."""
         name = self._settings.whisper_model
-        return name if "/" in name else f"mlx-community/whisper-{name}"
+        if "/" in name:  # already a full HF repo id
+            return name
+        repo = MLX_REPOS.get(name)
+        if repo is None:
+            logger.warning(
+                "No mlx-community repo known for %r — falling back to %s", name, MLX_DEFAULT_REPO
+            )
+            return MLX_DEFAULT_REPO
+        return repo
 
     @staticmethod
     def _prime(model: object) -> None:
