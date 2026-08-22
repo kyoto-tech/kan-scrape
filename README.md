@@ -4,14 +4,21 @@ Kan Scrape is a one-button event finder for Kyoto and the wider Kansai area. The
 records what you say, the backend transcribes the audio with local Whisper, refreshes real
 event sources, and uses Mistral to select the best matches.
 
-<p><em>Initial interface: one focused microphone action with the Kyoto Meetup Finder title.</em></p>
-<img src="./screenshots/screenshot_1.webp" alt="Kan Scrape initial one-button interface" width="100%" />
-
-<p><em>Results interface: the voice request has returned event cards with dates, categories and links.</em></p>
-<img src="./screenshots/screenshot_2.webp" alt="Kan Scrape event results interface" width="100%" />
-
 <p><em>Interaction demo: start speaking, stop the recording and review the returned events.</em></p>
 <img src="./screenshots/demo.gif" alt="Kan Scrape voice event search demo" width="100%" />
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <p><em>Initial interface: one focused microphone action with the Kyoto Meetup Finder title.</em></p>
+      <img src="./screenshots/screenshot_1.webp" alt="Kan Scrape initial one-button interface" width="100%" />
+    </td>
+    <td width="50%" align="center">
+      <p><em>Results interface: event cards with dates, categories and links.</em></p>
+      <img src="./screenshots/screenshot_2.webp" alt="Kan Scrape event results interface" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ## Repository structure
 
