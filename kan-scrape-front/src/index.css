@@ -59,7 +59,8 @@ body {
 html,
 body {
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 h1,
@@ -106,8 +107,7 @@ code {
 
 .app-shell {
   width: min(calc(100% - 2rem), 48rem);
-  height: 100dvh;
-  min-height: 0;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 1.5rem 0;
   box-sizing: border-box;
@@ -299,13 +299,8 @@ code {
 .results-panel {
   width: 100%;
   max-width: 48rem;
-  max-height: 34dvh;
-  overflow-y: auto;
   margin-top: 1.5rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface-muted);
+  padding: 0;
   box-sizing: border-box;
   text-align: left;
 }
@@ -344,10 +339,20 @@ code {
 }
 
 .event-card__category {
-  margin: 0 0 0.25rem;
+  display: inline-flex;
+  width: fit-content;
+  margin: 0 0 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
   color: var(--accent);
+  background: var(--accent-bg);
   font-size: 0.65rem;
   font-weight: 800;
+}
+
+.event-card--featured {
+  border-color: var(--accent);
+  border-width: 2px;
 }
 
 .event-card h2 {
@@ -359,9 +364,37 @@ code {
 
 .results-pitch {
   margin: 0 0 1rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.75rem;
   color: var(--text-h);
+  background: var(--accent-bg);
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.event-card__labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.event-card__labels .event-card__category {
+  margin-bottom: 0;
+}
+
+.event-card__featured-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 9999px;
+  color: var(--accent);
+  background: var(--accent-bg);
+  font-size: 0.65rem;
+  font-weight: 800;
 }
 
 .event-card__link {
@@ -418,9 +451,7 @@ code {
   }
 
   .results-panel {
-    max-height: 32dvh;
     margin-top: 1rem;
-    padding: 0.75rem;
   }
 
   .event-card {

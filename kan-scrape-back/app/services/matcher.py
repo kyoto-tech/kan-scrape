@@ -20,6 +20,18 @@ logger = logging.getLogger(__name__)
 
 MIN_QUERY_CHARS = 3
 TOOL_NAME = "pick_events"
+OUT_OF_SCOPE_TERMS = (
+    "tokyo",
+    "yokohama",
+    "nagoya",
+    "sapporo",
+    "sendai",
+    "fukuoka",
+    "okinawa",
+    "new york",
+    "london",
+    "outside kansai",
+)
 MIN_PICK = 1
 MAX_PICK = 5
 
@@ -188,6 +200,20 @@ def resolve_ids(event_ids: list[str], by_id: dict[str, Event]) -> list[Event]:
     return chosen
 
 
+def is_kyoto_tech_meetup(event: Event) -> bool:
+    """Identify the community's own Meetup group for guaranteed top placement."""
+    return bool(
+        event.url and "meetup.com/kyoto-tech-meetup/events/" in str(event.url).casefold()
+    )
+
+
+def prioritize_community_event(events: list[Event]) -> list[Event]:
+    """Keep Kyoto Tech Meetup first, even when the response reaches the five-event cap."""
+    featured = [event for event in events if is_kyoto_tech_meetup(event)]
+    remaining = [event for event in events if not is_kyoto_tech_meetup(event)]
+    return (featured + remaining)[:MAX_PICK]
+
+
 def random_match(
     events: list[Event],
     *,
@@ -204,7 +230,10 @@ def random_match(
             pitch="I don't have any upcoming events right now — try refreshing in a moment.",
             mode="random",
         )
-    chosen = random.sample(events, k=min(len(events), MAX_PICK))
+    featured = [event for event in events if is_kyoto_tech_meetup(event)]
+    remaining = [event for event in events if not is_kyoto_tech_meetup(event)]
+    sample_size = min(len(remaining), MAX_PICK - min(len(featured), 1))
+    chosen = prioritize_community_event(featured[:1] + random.sample(remaining, k=sample_size))
     event = chosen[0]
     where = event.city or event.location or "Kansai"
     tail = f"{event.title} on {format_when(event)} in {where}."
@@ -218,6 +247,12 @@ def random_match(
     )
 
 
+def is_out_of_scope(query: str) -> bool:
+    """Catch explicit requests for locations outside the current Kansai coverage."""
+    normalized = query.casefold()
+    return any(term in normalized for term in OUT_OF_SCOPE_TERMS)
+
+
 async def match(
     query: str,
     events: list[Event],
@@ -228,6 +263,17 @@ async def match(
 ) -> MatchResponse:
     """Never raises. Returns `mode="match"` on success, `mode="random"` on any failure."""
     transcript = transcript if transcript is not None else query
+    if is_out_of_scope(query):
+        return MatchResponse(
+            transcript=transcript,
+            language=language,
+            events=[],
+            pitch=(
+                "I am currently specialised in events across Kansai, including Kyoto, Osaka, "
+                "Kobe, Nara and nearby areas."
+            ),
+            mode="match",
+        )
     if len(query.strip()) < MIN_QUERY_CHARS:
         logger.info("Query too short (%r) — random mode", query)
         return random_match(events, transcript=transcript, language=language)
@@ -250,7 +296,7 @@ async def match(
             return MatchResponse(
                 transcript=transcript,
                 language=language,
-                events=chosen,
+                events=prioritize_community_event(chosen),
                 pitch=picked.pitch,
                 mode="match",
             )

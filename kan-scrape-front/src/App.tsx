@@ -32,6 +32,21 @@ type MatchResponse = {
 const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
 const timeFormatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
 
+function titleCase(value: string) {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value
+}
+
+function isKyotoTechMeetup(event: ApiEvent) {
+  return event.url?.toLowerCase().includes('meetup.com/kyoto-tech-meetup/events/') ?? false
+}
+
+function getResultsSummary(events: ApiEvent[]) {
+  if (events.length === 0) return 'I am currently specialised in Kansai events, including Kyoto, Osaka, Kobe and Nara.'
+  const names = events.slice(0, 2).map((event) => event.title).join(' and ')
+  const suffix = events.length > 2 ? ` and ${events.length - 2} more` : ''
+  return `We found ${events.length} event${events.length === 1 ? '' : 's'} for you: ${names}${suffix}.`
+}
+
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const stored = window.localStorage.getItem('kan-scrape-theme')
@@ -145,7 +160,9 @@ function App() {
       if (!response.ok) throw new Error(`Search failed with ${response.status}`)
       const nextResult = await response.json() as MatchResponse
       setResult(nextResult)
-      toast.success(nextResult.mode === 'match' ? 'Meetups found' : 'Here is a surprise pick', { description: nextResult.pitch })
+      toast.success(nextResult.mode === 'match' ? 'Events found for you' : 'Here is a surprise pick', {
+        description: getResultsSummary(nextResult.events),
+      })
     } catch (error) {
       const backendUnavailable = error instanceof TypeError
       toast.error(backendUnavailable ? 'Backend unavailable' : 'Search failed', {
@@ -200,7 +217,7 @@ function App() {
         }}
       />
       <h1 ref={titleRef}>Kyoto Meetup Finder</h1>
-      <p ref={introRef} className="intro">Speak into the microphone to find the best meetup events.</p>
+      <p ref={introRef} className="intro">Speak into the microphone in any language to find the best meetup events.</p>
       <button
         ref={buttonRef}
         className={`talk-button${isListening ? ' is-listening' : ''}${isSearching ? ' is-searching' : ''}`}
@@ -219,14 +236,17 @@ function App() {
 
       {result && (
         <section className="results-panel" aria-live="polite">
-          <p className="results-pitch">{result.pitch}</p>
+          <p className="results-pitch">{getResultsSummary(result.events)}</p>
           <div className="results-heading"><span>Curated for Kyoto</span><span>{result.events.length} events</span></div>
           <div className="event-list">
             {result.events.map((event) => (
-              <article className="event-card" key={event.id}>
+              <article className={`event-card${isKyotoTechMeetup(event) ? ' event-card--featured' : ''}`} key={event.id}>
                 <div className="event-card__date">{dateFormatter.format(new Date(event.starts_at))}</div>
                 <div className="event-card__content">
-                  <p className="event-card__category">{event.tags[0] ?? event.source}</p>
+                  <div className="event-card__labels">
+                    <p className="event-card__category">{titleCase(event.tags[0] ?? event.source)}</p>
+                    {isKyotoTechMeetup(event) && <span className="event-card__featured-badge">★ Starred</span>}
+                  </div>
                   <h2>{event.title}</h2>
                   <p className="event-card__meta">{event.location ?? event.city ?? 'Kansai'} · {timeFormatter.format(new Date(event.starts_at))}</p>
                   <p className="event-card__description">{event.description ?? 'Details will be available from the event organiser.'}</p>
