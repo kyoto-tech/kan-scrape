@@ -45,6 +45,9 @@ The backend is not implemented yet. Do not create backend conventions or depende
 - The button must be a two-state toggle: first click starts listening, second click stops and submits. It needs `aria-pressed`, an accessible label, focus-visible styling, and a visible listening state.
 - Use GSAP for the initial entrance only: the title fades down from above and the button zooms in. Respect `prefers-reduced-motion` and clean up the GSAP context on unmount.
 - Keep backend communication behind a small request boundary; the current frontend endpoint is `POST /api/scrape` with `{ message }` and a `{ result }` response.
+- Until the backend exists, use the local Kyoto meetup fixture in `App.tsx` to demonstrate the result state. Keep the fixture clearly replaceable by the backend response.
+- Use `goey-toast` mounted at `top-right` for success, error, and recoverable input feedback. Do not render persistent error copy under the primary button.
+- While a search is in flight, disable the button and show the `Searching…` label with an animated loader.
 - Do not add a dependency for a small utility unless repeated use justifies it.
 
 ## Verification

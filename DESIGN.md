@@ -15,7 +15,7 @@ This design reference is based on the public Kyoto Tech Meetup website: <https:/
 
 ## Current interface challenge
 
-The initial interface is deliberately only one action: a single toggle-to-speak button centered on the viewport, with the title `Kyoto Meetup Finder` above it. There is no navigation, form, dashboard, decorative card, or secondary CTA.
+The initial interface is deliberately only one action: a single toggle-to-speak button centered on the viewport, with the title `Kyoto Meetup Finder` and one short description above it. There is no navigation, form, dashboard, decorative card, or secondary CTA.
 
 Interaction sequence:
 
@@ -24,9 +24,11 @@ Interaction sequence:
 3. Click the button again to stop capture and send `POST /api/scrape` with `{ "message": "..." }`.
 4. Keep the same page and show the backend's `{ "result": "..." }` response when processing finishes.
 
-The button is the only initial visible control. Its label and state may change between `Start speaking`, `Listening…`, `Stop and search`, and a recoverable error. A result may appear after submission.
+The button is the only initial visible control. Its label and state may change between `Start speaking`, `Listening…`, `Stop and search`, `Searching…`, and a recoverable error. A result may appear after submission. An empty transcript must not show a persistent instructional message; the user can simply try again.
 
-The page occupies exactly the viewport using `100dvh` and does not scroll. The title and button enter once on first load: the title uses a top fade-in and the button uses a zoom-in. GSAP handles the entrance timeline and skips it when `prefers-reduced-motion: reduce` is active.
+The content container is capped at 768px (`48rem`). Below 640px it uses the full available width with 16px horizontal padding, and the button fills that mobile width.
+
+The page occupies exactly the viewport using `100dvh` and does not scroll. On first load, GSAP reveals the title first, then the description, then the button. The title and description use a long top fade-in; the button uses only a distinctive fade-in from a brief blur state and must not zoom or scale during entrance. The timeline skips animation when `prefers-reduced-motion: reduce` is active.
 
 ## Colors
 
@@ -165,6 +167,16 @@ The source uses a standard 150ms transition with `cubic-bezier(.4, 0, .2, 1)` an
 Every interactive component should define default, hover, focus-visible, active, disabled, loading, error, and success behavior where applicable. Focus must be visible, and keyboard behavior must remain correct.
 
 The primary button uses a restrained 2px hover lift, a terracotta active/listening state, a soft terracotta focus halo, and a subtle pulse on its listening indicator. Respect `prefers-reduced-motion`.
+
+While the request is in flight, the button is disabled, uses a slate searching surface, displays a small circular loader, and reads `Searching…`. Until the backend is connected, the page uses a local fixture containing Kyoto meetup events to preview the final result presentation.
+
+## Toast feedback
+
+Use `goey-toast` with a single `<GooeyToaster position="top-right" />`. Success, error, and empty-input feedback appear as toasts rather than persistent text below the button. Match the system with dark slate success surfaces, terracotta error surfaces, restrained bounce, and short descriptions.
+
+## Result presentation
+
+The demo result is a compact, scroll-safe event panel. It contains a small uppercase result heading, event count, and cards with date, category, title, venue, time, and a one-line description. The panel is secondary to the primary action and may appear only after a search completes.
 
 ## Component guidance
 
