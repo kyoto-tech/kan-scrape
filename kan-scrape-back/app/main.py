@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 
@@ -29,9 +30,11 @@ async def _warmup_stt() -> None:
         warmup = getattr(stt, "warmup", None)
         if warmup is None:
             return
+        started = time.perf_counter()
         result = warmup()
         if inspect.isawaitable(result):
             await result
+        logger.info("STT warmup finished in %.1fs", time.perf_counter() - started)
     except Exception:  # noqa: BLE001 - never break startup on STT
         logger.warning("STT warmup failed", exc_info=True)
 
@@ -46,7 +49,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tasks: list[asyncio.Task[object]] = []
     if settings.fetch_remote_sources:
         tasks.append(asyncio.create_task(store.refresh(), name="events-refresh"))
-    tasks.append(asyncio.create_task(_warmup_stt(), name="stt-warmup"))
+
+    # Blocking on purpose: the server should not report itself ready until Whisper can
+    # answer, so the first /api/transcribe never pays the model load. STT_WARMUP=false
+    # restores lazy loading (tests use that). Never raises — a dead model just means 503s.
+    await _warmup_stt()
 
     try:
         yield

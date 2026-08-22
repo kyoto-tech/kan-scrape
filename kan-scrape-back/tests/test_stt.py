@@ -82,7 +82,7 @@ async def test_transcribe_joins_segments_and_passes_language(
         text="I want a Python meetup in Kyoto.", language="en", duration_s=3.2, provider="whisper"
     )
     assert service.ready is True
-    call = models[0].calls[0]
+    call = models[0].calls[-1]  # [0] is the silent priming pass done at load time
     assert call["beam_size"] == 1 and call["vad_filter"] is True and call["language"] is None
     assert call["path"].endswith(".webm")
 
@@ -239,6 +239,21 @@ def test_route_returns_503_when_the_model_is_down(
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Transcription unavailable"}
+
+
+def test_status_reports_readiness(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    service = SpeechToText(_settings(whisper_model="tiny"))
+    monkeypatch.setattr("app.api.routes.transcribe.get_stt", lambda: service)
+
+    response = client.get("/api/transcribe/status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "ready": False,
+        "model": "tiny",
+        "device": None,
+        "compute_type": None,
+    }
 
 
 # --- integration ---------------------------------------------------------------------

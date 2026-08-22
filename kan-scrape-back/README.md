@@ -39,6 +39,7 @@ uv run ruff format . # format
 | POST   | `/api/match/voice`    | multipart `audio` (webm/opus) → STT → `MatchResponse`                         |
 | GET    | `/api/speech`         | `?text=&voice=` → `audio/mpeg` via edge-tts (503 if unavailable)              |
 | POST   | `/api/transcribe`     | multipart `audio` (webm/opus) → `{text, language, duration_s, provider}`      |
+| GET    | `/api/transcribe/status` | `{ready, model, device, compute_type}` — is Whisper loaded, and on what?   |
 
 `MatchResponse` = `{transcript, language, events[], pitch, mode: "match" | "random"}`.
 No endpoint returns 500: STT/LLM/source failures degrade to `mode="random"`, and only `/api/speech`
@@ -75,7 +76,7 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `WHISPER_DEVICE`        | `auto`                         | `auto` \| `cuda` \| `cpu`                       |
 | `WHISPER_COMPUTE_TYPE`  | —                              | e.g. `float16`, `int8`                          |
 | `STT_MAX_SECONDS`       | `60`                           | Longer clips are rejected with 413              |
-| `STT_WARMUP`            | `true`                         | Preload Whisper at startup (background task)    |
+| `STT_WARMUP`            | `true`                         | Load Whisper into VRAM at startup; `false` = lazy |
 | `STT_FALLBACK`          | —                              | `voxtral` to enable the API fallback            |
 | `EDGE_TTS_VOICE`        | `en-US-AvaMultilingualNeural`  | Default `/api/speech` voice                    |
 | `DOORKEEPER_TOKEN`      | —                              | Enables the Doorkeeper adapter                 |

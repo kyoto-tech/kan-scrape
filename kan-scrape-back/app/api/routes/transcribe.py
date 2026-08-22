@@ -6,6 +6,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from app.services.stt import AudioTooLongError, SttError, Transcript, get_stt
 
@@ -40,3 +41,22 @@ async def transcribe_audio(
     except Exception as exc:  # noqa: BLE001 - never leak a 500 from the model
         logger.exception("Unexpected transcription failure")
         raise HTTPException(status_code=503, detail="Transcription unavailable") from exc
+
+
+class SttStatus(BaseModel):
+    ready: bool
+    model: str
+    device: str | None = None
+    compute_type: str | None = None
+
+
+@router.get("/transcribe/status", response_model=SttStatus)
+async def transcribe_status() -> SttStatus:
+    """Is Whisper loaded, and on what? `ready` is true once the model can answer."""
+    service = get_stt()
+    return SttStatus(
+        ready=service.ready,
+        model=service.model_name,
+        device=service.device,
+        compute_type=service.compute_type,
+    )

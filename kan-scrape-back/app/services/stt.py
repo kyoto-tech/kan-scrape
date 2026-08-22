@@ -74,6 +74,10 @@ class SpeechToText:
         return self._model is not None
 
     @property
+    def model_name(self) -> str:
+        return self._settings.whisper_model
+
+    @property
     def device(self) -> str | None:
         return self._device
 
@@ -111,15 +115,53 @@ class SpeechToText:
             _preload_cuda_libs()
         for device, compute_type in candidates:
             try:
-                model = WhisperModel(name, device=device, compute_type=compute_type)
+                model = self._build(WhisperModel, name, device, compute_type)
             except Exception as exc:  # noqa: BLE001 - try the next candidate device
                 errors.append(f"{device}/{compute_type}: {exc}")
                 logger.warning("Whisper failed to load on %s/%s: %s", device, compute_type, exc)
                 continue
             self._device, self._compute_type = device, compute_type
             logger.info("Whisper %r loaded on %s/%s", name, device, compute_type)
+            self._prime(model)
             return model
         raise SttError(f"Could not load Whisper model {name!r} ({'; '.join(errors)})")
+
+    @staticmethod
+    def _prime(model: object) -> None:
+        """Run one inference on silence so CUDA kernels are compiled before the first request.
+
+        Loading the weights is not the same as being warm: the first real call otherwise pays
+        ~0.6s of cuDNN/cuBLAS init. A second of zeros is enough to force that work now.
+        """
+        try:
+            import numpy as np
+
+            segments, _ = model.transcribe(  # type: ignore[attr-defined]
+                np.zeros(16_000, dtype=np.float32), beam_size=1
+            )
+            for _ in segments:
+                pass
+        except Exception:  # noqa: BLE001 - priming is an optimisation, never a requirement
+            logger.debug("Whisper priming skipped", exc_info=True)
+
+    @staticmethod
+    def _build(factory: object, name: str, device: str, compute_type: str) -> object:
+        """Load from the local HF cache first.
+
+        The default path pings huggingface.co for the current revision on every boot, which
+        costs seconds of startup and fails outright offline. Only reach for the network when
+        the model genuinely is not cached yet.
+        """
+        try:
+            return factory(  # type: ignore[operator]
+                name, device=device, compute_type=compute_type, local_files_only=True
+            )
+        except TypeError:
+            # A stand-in (tests) that does not take the kwarg.
+            return factory(name, device=device, compute_type=compute_type)  # type: ignore[operator]
+        except Exception:  # noqa: BLE001 - not cached yet; allow the download
+            logger.info("Whisper %r is not in the local cache — downloading", name)
+            return factory(name, device=device, compute_type=compute_type)  # type: ignore[operator]
 
     async def transcribe(self, audio: bytes, filename: str = "audio.webm") -> Transcript:
         if not audio:
