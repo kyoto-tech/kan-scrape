@@ -11,11 +11,10 @@
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
-    "framer-motion": "^13.1.1",
-    "goey-toast": "^0.5.0",
     "gsap": "^3.15.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "sonner": "^2.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

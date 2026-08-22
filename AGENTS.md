@@ -43,11 +43,13 @@ The backend is not implemented yet. Do not create backend conventions or depende
 - Keep the initial surface to one visible button. Do not add navigation, forms, dashboards, decorative cards, or secondary actions.
 - Keep the viewport locked to `100dvh` with no page scroll.
 - The button must be a two-state toggle: first click starts listening, second click stops and submits. It needs `aria-pressed`, an accessible label, focus-visible styling, and a visible listening state.
-- Use GSAP for the initial entrance only: the title fades down from above and the button zooms in. Respect `prefers-reduced-motion` and clean up the GSAP context on unmount.
+- Use GSAP for the initial entrance only: the title and description fade down from above, then the button fades in without zooming. Respect `prefers-reduced-motion` and clean up the GSAP context on unmount.
 - Keep backend communication behind a small request boundary; the current frontend endpoint is `POST /api/scrape` with `{ message }` and a `{ result }` response.
 - Until the backend exists, use the local Kyoto meetup fixture in `App.tsx` to demonstrate the result state. Keep the fixture clearly replaceable by the backend response.
-- Use `goey-toast` mounted at `top-right` for success, error, and recoverable input feedback. Do not render persistent error copy under the primary button.
+- Use Sonner mounted at `top-right` with a fixed light theme for success, error, and recoverable input feedback. Do not render persistent error copy under the primary button.
+- Avoid em dashes, all-uppercase interface copy, and decorative letter spacing. Use normal sentence case and natural tracking.
 - While a search is in flight, disable the button and show the `Searching…` label with an animated loader.
+- While listening, use the microphone's live audio level to make the button indicator react subtly. Stop the animation, microphone tracks, and audio context when listening ends.
 - Do not add a dependency for a small utility unless repeated use justifies it.
 
 ## Verification

@@ -14,7 +14,6 @@
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
   color-scheme: light;
   color: var(--text);
   background: var(--bg);
@@ -75,7 +74,6 @@ h2 {
 
 h1 {
   font-size: 56px;
-  letter-spacing: -1.68px;
   margin: 32px 0;
   @media (max-width: 1024px) {
     font-size: 36px;
@@ -85,7 +83,6 @@ h1 {
 h2 {
   font-size: 24px;
   line-height: 118%;
-  letter-spacing: -0.24px;
   margin: 0 0 8px;
   @media (max-width: 1024px) {
     font-size: 20px;
@@ -123,8 +120,6 @@ code {
   color: var(--accent);
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
 }
 
 .app-shell h1 {
@@ -132,7 +127,6 @@ code {
   color: var(--text-h);
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 1;
-  letter-spacing: -0.04em;
 }
 
 .intro {
@@ -194,10 +188,13 @@ code {
 }
 
 .talk-button__dot {
+  --voice-level: 0;
   width: 0.625rem;
   height: 0.625rem;
   border-radius: 9999px;
   background: currentColor;
+  transform: scale(calc(1 + var(--voice-level) * 0.9));
+  transition: transform 80ms ease-out;
 }
 
 .talk-button:disabled {
@@ -230,6 +227,26 @@ code {
   font-size: 0.875rem;
 }
 
+.kan-toast {
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.kan-toast__content {
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.kan-toast__title,
+.kan-toast__description {
+  text-align: left !important;
+}
+
+.kan-toast__icon {
+  align-self: flex-start !important;
+  margin-top: 0.15rem !important;
+}
+
 .results-panel {
   width: 100%;
   max-width: 48rem;
@@ -252,8 +269,6 @@ code {
   color: #64748b;
   font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 .event-list {
@@ -277,7 +292,6 @@ code {
   color: var(--accent);
   font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
 }
 
 .event-card__category {
@@ -285,7 +299,6 @@ code {
   color: var(--accent);
   font-size: 0.65rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
 }
 
 .event-card h2 {

@@ -1,8 +1,7 @@
 import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
-import { GooeyToaster, gooeyToast } from 'goey-toast'
-import { useRef, useState } from 'react'
-import 'goey-toast/styles.css'
+import { Toaster, toast } from 'sonner'
+import { useRef, useState, type CSSProperties } from 'react'
 
 gsap.registerPlugin(useGSAP)
 
@@ -46,8 +45,8 @@ type MeetupEvent = {
 
 const DEMO_EVENTS: MeetupEvent[] = [
   {
-    date: 'AUG 29',
-    category: 'TECH & COFFEE',
+    date: 'Aug 29',
+    category: 'Tech & Coffee',
     title: 'Morning Tech & Coffee',
     location: 'Starbucks Karasuma Shijo',
     time: '09:30–10:30',
@@ -55,8 +54,8 @@ const DEMO_EVENTS: MeetupEvent[] = [
       'A relaxed, conversation-first meetup for builders, designers, and curious minds.',
   },
   {
-    date: 'SEP 12',
-    category: 'HACK DAY',
+    date: 'Sep 12',
+    category: 'Hack Day',
     title: 'Community Hack Day',
     location: 'FabCafe Kyoto MTRL/KYOTO',
     time: '12:00–17:00',
@@ -64,8 +63,8 @@ const DEMO_EVENTS: MeetupEvent[] = [
       'Bring an idea, a side project, or just your curiosity and build alongside the community.',
   },
   {
-    date: 'SEP 17',
-    category: 'TECH & COFFEE',
+    date: 'Sep 17',
+    category: 'Tech & Coffee',
     title: 'Morning Tech & Coffee',
     location: 'Starbucks Karasuma Shijo',
     time: '08:30–09:30',
@@ -77,9 +76,14 @@ const DEMO_EVENTS: MeetupEvent[] = [
 function App() {
   const [isListening, setIsListening] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
+  const [voiceLevel, setVoiceLevel] = useState(0)
   const [events, setEvents] = useState<MeetupEvent[]>([])
   const recognitionRef = useRef<Recognition | null>(null)
   const transcriptRef = useRef('')
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const microphoneStreamRef = useRef<MediaStream | null>(null)
+  const meterFrameRef = useRef<number | null>(null)
   const appRef = useRef<HTMLElement | null>(null)
   const titleRef = useRef<HTMLHeadingElement | null>(null)
   const introRef = useRef<HTMLParagraphElement | null>(null)
@@ -124,17 +128,71 @@ function App() {
     { scope: appRef },
   )
 
-  const startListening = () => {
+  const stopVoiceMeter = () => {
+    if (meterFrameRef.current !== null) {
+      cancelAnimationFrame(meterFrameRef.current)
+      meterFrameRef.current = null
+    }
+
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop())
+    microphoneStreamRef.current = null
+
+    if (audioContextRef.current) {
+      void audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+
+    analyserRef.current = null
+    setVoiceLevel(0)
+  }
+
+  const startVoiceMeter = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const audioContext = new AudioContext()
+    const analyser = audioContext.createAnalyser()
+    const source = audioContext.createMediaStreamSource(stream)
+
+    analyser.fftSize = 256
+    const data = new Uint8Array(analyser.fftSize)
+    source.connect(analyser)
+    microphoneStreamRef.current = stream
+    audioContextRef.current = audioContext
+    analyserRef.current = analyser
+
+    const measure = () => {
+      if (!analyserRef.current) return
+
+      analyserRef.current.getByteTimeDomainData(data)
+      const sum = data.reduce((total, sample) => {
+        const normalized = (sample - 128) / 128
+        return total + normalized * normalized
+      }, 0)
+      const rms = Math.sqrt(sum / data.length)
+      setVoiceLevel((current) => current * 0.65 + Math.min(rms * 3, 1) * 0.35)
+      meterFrameRef.current = requestAnimationFrame(measure)
+    }
+
+    measure()
+  }
+
+  const startListening = async () => {
     if (isListening) return
 
     const Recognition =
       window.SpeechRecognition ?? window.webkitSpeechRecognition
 
     if (!Recognition) {
-      gooeyToast.error('Speech input unavailable', {
+      toast.error('Speech input unavailable', {
         description: 'Try a browser with microphone speech recognition enabled.',
-        fillColor: '#B83230',
-        borderColor: '#8F2624',
+      })
+      return
+    }
+
+    try {
+      await startVoiceMeter()
+    } catch {
+      toast.error('Microphone access is needed', {
+        description: 'Allow microphone access to show your voice level.',
       })
       return
     }
@@ -151,14 +209,16 @@ function App() {
         .join(' ')
     }
     recognition.onerror = () => {
-      gooeyToast.error('We could not hear that', {
+      toast.error('We could not hear that', {
         description: 'Try again and speak clearly into your microphone.',
-        fillColor: '#B83230',
-        borderColor: '#8F2624',
       })
       setIsListening(false)
+      stopVoiceMeter()
     }
-    recognition.onend = () => setIsListening(false)
+    recognition.onend = () => {
+      setIsListening(false)
+      stopVoiceMeter()
+    }
     recognitionRef.current = recognition
     recognition.start()
     setIsListening(true)
@@ -168,10 +228,11 @@ function App() {
     recognitionRef.current?.stop()
     recognitionRef.current = null
     setIsListening(false)
+    stopVoiceMeter()
 
     const transcript = transcriptRef.current.trim()
     if (!transcript) {
-      gooeyToast.info('Nothing to search yet', {
+      toast.info('Nothing to search yet', {
         description: 'Speak into the microphone before stopping the search.',
       })
       return
@@ -182,16 +243,12 @@ function App() {
       // Demo response until the backend endpoint is connected.
       await new Promise((resolve) => window.setTimeout(resolve, 1400))
       setEvents(DEMO_EVENTS)
-      gooeyToast.success('Meetups found', {
+      toast.success('Meetups found', {
         description: 'Here are a few events matching your request.',
-        fillColor: '#0F172A',
-        borderColor: '#334155',
       })
     } catch {
-      gooeyToast.error('Search failed', {
+      toast.error('Search failed', {
         description: 'The meetup search could not be completed. Try again.',
-        fillColor: '#B83230',
-        borderColor: '#8F2624',
       })
     } finally {
       setIsSearching(false)
@@ -206,12 +263,31 @@ function App() {
       return
     }
 
-    startListening()
+    void startListening()
   }
 
   return (
     <main ref={appRef} className="app-shell">
-      <GooeyToaster position="top-right" />
+      <Toaster
+        position="top-right"
+        theme="light"
+        richColors
+        toastOptions={{
+          duration: 4200,
+          classNames: {
+            toast: 'kan-toast',
+            content: 'kan-toast__content',
+            title: 'kan-toast__title',
+            description: 'kan-toast__description',
+            icon: 'kan-toast__icon',
+          },
+          style: {
+            borderRadius: '12px',
+            fontFamily: 'system-ui, "Segoe UI", Roboto, sans-serif',
+            textAlign: 'left',
+          },
+        }}
+      />
       <h1 ref={titleRef}>Kyoto Meetup Finder</h1>
       <p ref={introRef} className="intro">
         Speak into the microphone to find the best meetup events.
@@ -235,7 +311,15 @@ function App() {
         {isSearching ? (
           <span aria-hidden="true" className="talk-button__loader" />
         ) : (
-          <span aria-hidden="true" className="talk-button__dot" />
+          <span
+            aria-hidden="true"
+            className="talk-button__dot"
+            style={
+              {
+                '--voice-level': voiceLevel,
+              } as CSSProperties
+            }
+          />
         )}
         {isSearching
           ? 'Searching…'

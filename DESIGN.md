@@ -170,9 +170,17 @@ The primary button uses a restrained 2px hover lift, a terracotta active/listeni
 
 While the request is in flight, the button is disabled, uses a slate searching surface, displays a small circular loader, and reads `Searching…`. Until the backend is connected, the page uses a local fixture containing Kyoto meetup events to preview the final result presentation.
 
+While listening, the button indicator uses the microphone's live audio level. Silence keeps the dot at its resting scale; speech increases it subtly up to a restrained maximum. The microphone stream and audio context must be released as soon as listening stops.
+
 ## Toast feedback
 
-Use `goey-toast` with a single `<GooeyToaster position="top-right" />`. Success, error, and empty-input feedback appear as toasts rather than persistent text below the button. Match the system with dark slate success surfaces, terracotta error surfaces, restrained bounce, and short descriptions.
+Use Sonner with a single `<Toaster position="top-right" theme="light" />`. Success, error, and empty-input feedback appear as toasts rather than persistent text below the button. Toast text is left aligned and the icon sits at the top-left of the toast content. Match the system with light surfaces, dark slate text, terracotta error accents, restrained motion, and short descriptions.
+
+## Copy and typography rules
+
+- Avoid em dashes. Use commas, periods, colons, or parentheses instead.
+- Avoid all-uppercase interface copy. Use sentence case for headings, labels, statuses, categories, and toast titles.
+- Avoid decorative letter spacing. Use the natural tracking of the selected font.
 
 ## Result presentation
 
