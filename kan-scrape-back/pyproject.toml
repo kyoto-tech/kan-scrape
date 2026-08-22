@@ -16,9 +16,16 @@ dependencies = [
     "python-multipart>=0.0.32",
     "faster-whisper>=1.2.1",
     "edge-tts>=7.2.8",
-    "nvidia-cublas-cu12>=12.9.2.10",
-    "nvidia-cudnn-cu12>=9.24.0.43",
+    # CUDA 12 runtime for ctranslate2. No macOS wheels exist and they are useless without
+    # an NVIDIA GPU, so keep them off Darwin — the Mac path runs on CPU or MLX.
+    "nvidia-cublas-cu12>=12.9.2.10; sys_platform != 'darwin'",
+    "nvidia-cudnn-cu12>=9.24.0.43; sys_platform != 'darwin'",
 ]
+
+[project.optional-dependencies]
+# Apple Silicon GPU (Metal) backend. Optional because it drags in torch/numba/scipy (~2 GB)
+# and only installs on darwin/arm64: `uv sync --extra mlx`.
+mlx = ["mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 
 [dependency-groups]
 dev = [

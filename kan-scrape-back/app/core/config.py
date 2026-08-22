@@ -28,10 +28,11 @@ class Settings(BaseSettings):
 
     # --- STT (local first) ---
     whisper_model: str = "large-v3-turbo"
-    whisper_device: str = "auto"  # auto | cuda | cpu
+    whisper_device: str = "auto"  # auto | cuda | mlx (Apple Silicon) | cpu
     whisper_compute_type: str | None = None  # default: float16 on cuda, int8 on cpu
     stt_fallback: str | None = None  # None | "voxtral"
     voxtral_model: str = "voxtral-mini-latest"
+    mlx_whisper_repo: str | None = None  # override the mlx-community repo guess
     stt_max_seconds: int = 60
     stt_warmup: bool = True  # False keeps the model unloaded until the first request
 

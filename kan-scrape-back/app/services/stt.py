@@ -1,8 +1,11 @@
 """Local-first speech-to-text.
 
-`faster-whisper` runs on the GPU when one is available and silently degrades to CPU/int8
-otherwise. Mistral Voxtral is an opt-in fallback (`STT_FALLBACK=voxtral`) used only when the
-local model cannot load or raises — never while Whisper works.
+`faster-whisper` runs on an NVIDIA GPU when one is available. On Apple Silicon it degrades to
+CPU/int8 unless the optional `mlx` extra is installed, which routes inference through
+`mlx-whisper` on the Metal GPU instead. Any backend failure falls back to CPU.
+
+Mistral Voxtral is an opt-in fallback (`STT_FALLBACK=voxtral`) used only when the local model
+cannot load or raises — never while Whisper works.
 
 The module-level `transcribe()` / `warmup()` helpers are the contract the match route codes
 against; they delegate to the process-wide `SpeechToText` singleton.
@@ -13,7 +16,9 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import logging
+import platform
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Literal
@@ -42,19 +47,84 @@ class AudioTooLongError(SttError):
     """Clip exceeds `STT_MAX_SECONDS`."""
 
 
+#: Devices that mean "use the machine's GPU". Everything else falls back to CPU/int8.
+_GPU_DEVICES = frozenset({"cuda", "mlx"})
+
+
+def _is_apple_silicon() -> bool:
+    return sys.platform == "darwin" and platform.machine() in {"arm64", "aarch64"}
+
+
 def _resolve_device(settings: Settings) -> list[tuple[str, str]]:
-    """Ordered (device, compute_type) candidates to try when loading the model."""
+    """Ordered (device, compute_type) candidates to try when loading the model.
+
+    `auto` picks per platform: CUDA on Linux/Windows, MLX (Metal) on Apple Silicon, CPU on an
+    Intel Mac. CPU/int8 is always the last resort, so an unavailable GPU is never fatal.
+    """
     device = (settings.whisper_device or "auto").lower()
     compute = settings.whisper_compute_type or None
 
     def pair(dev: str) -> tuple[str, str]:
-        return dev, compute or ("float16" if dev == "cuda" else "int8")
+        return dev, compute or ("float16" if dev in _GPU_DEVICES else "int8")
 
+    if device in {"mlx", "mps", "metal"}:
+        return [pair("mlx"), pair("cpu")]
     if device == "cuda":
         return [pair("cuda"), pair("cpu")]
     if device == "cpu":
         return [pair("cpu")]
+    if sys.platform == "darwin":
+        # ctranslate2 has no Metal backend, so CUDA is never worth attempting here.
+        return [pair("mlx"), pair("cpu")] if _is_apple_silicon() else [pair("cpu")]
     return [pair("cuda"), pair("cpu")]
+
+
+class _MlxSegment:
+    """faster-whisper-shaped segment."""
+
+    __slots__ = ("end", "start", "text")
+
+    def __init__(self, text: str, start: float, end: float) -> None:
+        self.text, self.start, self.end = text, start, end
+
+
+class _MlxInfo:
+    """faster-whisper-shaped transcription info."""
+
+    __slots__ = ("duration", "language")
+
+    def __init__(self, language: str | None, duration: float) -> None:
+        self.language, self.duration = language, duration
+
+
+class _MlxModel:
+    """Adapter presenting `mlx-whisper` with the faster-whisper `WhisperModel` interface.
+
+    Keeping the same `(segments, info)` shape means the transcription, priming and
+    duration-limit paths stay backend-agnostic.
+    """
+
+    def __init__(self, repo: str) -> None:
+        import mlx_whisper  # noqa: PLC0415 - optional, Apple-Silicon-only dependency
+
+        self._mlx = mlx_whisper
+        self.repo = repo
+
+    def transcribe(self, audio: object, **kwargs: object) -> tuple[list[_MlxSegment], _MlxInfo]:
+        # mlx-whisper has no beam_size/vad_filter knobs; drop what it does not understand.
+        options: dict[str, object] = {}
+        if kwargs.get("language"):
+            options["language"] = kwargs["language"]
+
+        result = self._mlx.transcribe(audio, path_or_hf_repo=self.repo, **options)
+        segments = [
+            _MlxSegment(item.get("text", ""), item.get("start", 0.0), item.get("end", 0.0))
+            for item in result.get("segments") or []
+        ]
+        # mlx-whisper reports no clip duration, so use the last speech timestamp. That
+        # under-reports trailing silence, which only makes the length limit more lenient.
+        duration = max((segment.end for segment in segments), default=0.0)
+        return segments, _MlxInfo(result.get("language"), float(duration))
 
 
 class SpeechToText:
@@ -104,18 +174,18 @@ class SpeechToText:
         return self._model
 
     def _load_model(self) -> object:
-        from faster_whisper import WhisperModel
-
         name = self._settings.whisper_model
         errors: list[str] = []
         candidates = _resolve_device(self._settings)
         if self._force_cpu:
-            candidates = [pair for pair in candidates if pair[0] != "cuda"] or [("cpu", "int8")]
+            candidates = [pair for pair in candidates if pair[0] not in _GPU_DEVICES] or [
+                ("cpu", "int8")
+            ]
         if any(device == "cuda" for device, _ in candidates):
             _preload_cuda_libs()
         for device, compute_type in candidates:
             try:
-                model = self._build(WhisperModel, name, device, compute_type)
+                model = self._build_backend(name, device, compute_type)
             except Exception as exc:  # noqa: BLE001 - try the next candidate device
                 errors.append(f"{device}/{compute_type}: {exc}")
                 logger.warning("Whisper failed to load on %s/%s: %s", device, compute_type, exc)
@@ -126,12 +196,32 @@ class SpeechToText:
             return model
         raise SttError(f"Could not load Whisper model {name!r} ({'; '.join(errors)})")
 
+    def _build_backend(self, name: str, device: str, compute_type: str) -> object:
+        if device == "mlx":
+            return _MlxModel(self._mlx_repo())
+
+        from faster_whisper import WhisperModel  # noqa: PLC0415 - keeps import cost off startup
+
+        return self._build(WhisperModel, name, device, compute_type)
+
+    def _mlx_repo(self) -> str:
+        """Map the faster-whisper model name onto an mlx-community HF repo.
+
+        Not every faster-whisper name has an mlx-community counterpart, so `MLX_WHISPER_REPO`
+        overrides this outright.
+        """
+        if self._settings.mlx_whisper_repo:
+            return self._settings.mlx_whisper_repo
+        name = self._settings.whisper_model
+        return name if "/" in name else f"mlx-community/whisper-{name}"
+
     @staticmethod
     def _prime(model: object) -> None:
-        """Run one inference on silence so CUDA kernels are compiled before the first request.
+        """Run one inference on silence so the GPU kernels are ready before the first request.
 
         Loading the weights is not the same as being warm: the first real call otherwise pays
-        ~0.6s of cuDNN/cuBLAS init. A second of zeros is enough to force that work now.
+        ~0.6s of cuDNN/cuBLAS (or Metal shader) init. A second of zeros forces that work now,
+        and on CUDA it is also what actually moves the weights into VRAM.
         """
         try:
             import numpy as np
@@ -189,9 +279,9 @@ class SpeechToText:
                     raise
                 except Exception as exc:  # noqa: BLE001 - decode/inference failure
                     logger.warning("Whisper transcription failed: %s", exc)
-                    # CUDA can look healthy at load time and only break on the first kernel
-                    # call (missing cuBLAS/cuDNN). Demote to CPU once and retry.
-                    if self._device == "cuda":
+                    # A GPU backend can look healthy at load time and only break on the first
+                    # kernel call (missing cuBLAS/cuDNN, unsupported Metal op). Demote once.
+                    if self._device in _GPU_DEVICES:
                         cpu_model = await self._demote_to_cpu()
                         if cpu_model is not None:
                             try:
@@ -208,7 +298,7 @@ class SpeechToText:
 
     async def _demote_to_cpu(self) -> object | None:
         """Reload the model on CPU/int8 after a GPU runtime failure."""
-        logger.warning("Whisper failed on the GPU at inference time — reloading on CPU")
+        logger.warning("Whisper failed on %s at inference time — reloading on CPU", self._device)
         async with self._load_lock:
             self._force_cpu = True
             self._model = None

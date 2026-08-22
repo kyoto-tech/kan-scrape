@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -162,6 +163,118 @@ async def test_module_level_helpers_use_the_singleton(monkeypatch: pytest.Monkey
 
     assert result.provider == "whisper"
     assert get_stt().ready is True
+
+
+# --- platform / backend selection --------------------------------------------------
+
+
+def _devices(monkeypatch: pytest.MonkeyPatch, platform_name: str, machine: str, **cfg: Any):
+    monkeypatch.setattr(stt.sys, "platform", platform_name)
+    monkeypatch.setattr(stt.platform, "machine", lambda: machine)
+    return stt._resolve_device(_settings(**cfg))
+
+
+def test_apple_silicon_prefers_mlx_then_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _devices(monkeypatch, "darwin", "arm64") == [("mlx", "float16"), ("cpu", "int8")]
+
+
+def test_intel_mac_goes_straight_to_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ctranslate2 has no Metal backend and a Mac has no CUDA, so never attempt either.
+    assert _devices(monkeypatch, "darwin", "x86_64") == [("cpu", "int8")]
+
+
+def test_linux_still_prefers_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _devices(monkeypatch, "linux", "x86_64") == [("cuda", "float16"), ("cpu", "int8")]
+
+
+@pytest.mark.parametrize("alias", ["mlx", "mps", "metal"])
+def test_metal_aliases_select_mlx(monkeypatch: pytest.MonkeyPatch, alias: str) -> None:
+    devices = _devices(monkeypatch, "linux", "x86_64", whisper_device=alias)
+    assert devices == [("mlx", "float16"), ("cpu", "int8")]
+
+
+def test_explicit_cpu_wins_on_apple_silicon(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _devices(monkeypatch, "darwin", "arm64", whisper_device="cpu") == [("cpu", "int8")]
+
+
+class FakeMlxWhisper:
+    """Stand-in for the `mlx_whisper` module."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"audio": audio, **kwargs})
+        return {
+            "text": "I want a Python meetup in Kyoto.",
+            "language": "en",
+            "segments": [
+                {"text": " I want a Python meetup", "start": 0.0, "end": 1.8},
+                {"text": " in Kyoto.", "start": 1.8, "end": 3.2},
+            ],
+        }
+
+
+@pytest.fixture
+def fake_mlx(monkeypatch: pytest.MonkeyPatch) -> FakeMlxWhisper:
+    module = FakeMlxWhisper()
+    monkeypatch.setitem(sys.modules, "mlx_whisper", module)
+    return module
+
+
+def test_mlx_adapter_matches_the_faster_whisper_shape(fake_mlx: FakeMlxWhisper) -> None:
+    segments, info = stt._MlxModel("mlx-community/whisper-tiny").transcribe(
+        "/tmp/clip.webm", beam_size=1, vad_filter=True, language=None
+    )
+
+    assert [segment.text for segment in segments] == [
+        " I want a Python meetup",
+        " in Kyoto.",
+    ]
+    assert (info.language, info.duration) == ("en", 3.2)
+    # beam_size/vad_filter mean nothing to mlx-whisper and must not be forwarded.
+    assert fake_mlx.calls[0] == {
+        "audio": "/tmp/clip.webm",
+        "path_or_hf_repo": "mlx-community/whisper-tiny",
+    }
+
+
+async def test_apple_silicon_transcribes_through_mlx(
+    monkeypatch: pytest.MonkeyPatch, fake_mlx: FakeMlxWhisper
+) -> None:
+    monkeypatch.setattr(stt.sys, "platform", "darwin")
+    monkeypatch.setattr(stt.platform, "machine", lambda: "arm64")
+    service = SpeechToText(_settings(whisper_model="large-v3-turbo"))
+
+    result = await service.transcribe(b"bytes", "clip.webm")
+
+    assert result == Transcript(
+        text="I want a Python meetup in Kyoto.", language="en", duration_s=3.2, provider="whisper"
+    )
+    assert (service.device, service.compute_type) == ("mlx", "float16")
+
+
+async def test_mlx_failure_falls_back_to_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No mlx-whisper installed (the plain `uv sync` case on a Mac) must still work."""
+    monkeypatch.setattr(stt.sys, "platform", "darwin")
+    monkeypatch.setattr(stt.platform, "machine", lambda: "arm64")
+    monkeypatch.setitem(sys.modules, "mlx_whisper", None)  # import raises ImportError
+    _install(monkeypatch, FakeModel)
+
+    service = SpeechToText(_settings())
+    result = await service.transcribe(b"bytes")
+
+    assert result.provider == "whisper"
+    assert (service.device, service.compute_type) == ("cpu", "int8")
+
+
+def test_mlx_repo_is_derived_from_the_model_name() -> None:
+    assert SpeechToText(_settings(whisper_model="tiny"))._mlx_repo() == "mlx-community/whisper-tiny"
+    assert (
+        SpeechToText(_settings(whisper_model="mlx-community/whisper-turbo"))._mlx_repo()
+        == "mlx-community/whisper-turbo"
+    )
+    assert SpeechToText(_settings(mlx_whisper_repo="me/custom"))._mlx_repo() == "me/custom"
 
 
 # --- route ---------------------------------------------------------------------------

@@ -8,7 +8,27 @@ best-fitting upcoming events, and speaks the pitch back with edge-tts.
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- `ffmpeg` on PATH (audio decoding for STT)
+- `ffmpeg` on PATH (audio decoding for STT) — `brew install ffmpeg` on macOS
+
+### Speech-to-text hardware
+
+Transcription is local (`faster-whisper`) and picks its device automatically. Nothing here is
+required: every path falls back to CPU/int8, which works everywhere.
+
+| Platform                | `WHISPER_DEVICE=auto` picks | Install                       |
+|-------------------------|-----------------------------|-------------------------------|
+| Linux/Windows + NVIDIA  | `cuda` / float16            | `uv sync`                     |
+| Apple Silicon           | `mlx` / float16 (Metal GPU) | `uv sync --extra mlx`         |
+| Apple Silicon, no extra | `cpu` / int8                | `uv sync`                     |
+| Intel Mac               | `cpu` / int8                | `uv sync`                     |
+
+The CUDA runtime wheels are Linux/Windows-only (`sys_platform != 'darwin'`), so a plain
+`uv sync` on a Mac installs neither them nor MLX. `--extra mlx` adds `mlx-whisper`, which pulls
+torch/numba/scipy (~2 GB) and only resolves on darwin/arm64.
+
+ctranslate2 — the engine behind faster-whisper — has no Metal backend, which is why Apple GPU
+support goes through a separate `mlx-whisper` backend rather than a device flag. Both are hidden
+behind the same `SpeechToText` service, so nothing downstream changes.
 
 ## Local development
 
@@ -73,8 +93,9 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `MISTRAL_API_KEY`       | —                              | Matching + pitch. Missing → always random mode  |
 | `MISTRAL_CHAT_MODEL`    | `mistral-small-latest`         | Chat model used for `pick_events`              |
 | `WHISPER_MODEL`         | `large-v3-turbo`               | faster-whisper model name (`small`/`tiny` on weak machines) |
-| `WHISPER_DEVICE`        | `auto`                         | `auto` \| `cuda` \| `cpu`                       |
+| `WHISPER_DEVICE`        | `auto`                         | `auto` \| `cuda` \| `mlx` \| `cpu`               |
 | `WHISPER_COMPUTE_TYPE`  | —                              | e.g. `float16`, `int8`                          |
+| `MLX_WHISPER_REPO`      | —                              | Override the guessed `mlx-community` HF repo    |
 | `STT_MAX_SECONDS`       | `60`                           | Longer clips are rejected with 413              |
 | `STT_WARMUP`            | `true`                         | Load Whisper into VRAM at startup; `false` = lazy |
 | `STT_FALLBACK`          | —                              | `voxtral` to enable the API fallback            |
