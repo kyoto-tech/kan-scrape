@@ -1,0 +1,8 @@
+{
+  "name": "kan-scrape",
+  "private": true,
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:lan": "KAN_SCRAPE_VITE_HOST=0.0.0.0 bash scripts/dev.sh"
+  }
+}

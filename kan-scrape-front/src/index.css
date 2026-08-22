@@ -3,6 +3,9 @@
   --text-h: #0f172a;
   --bg: #fff;
   --border: #e2e8f0;
+  --surface: #ffffff;
+  --surface-muted: rgb(248 250 252 / 70%);
+  --border-strong: #cbd5e1;
   --accent: #b83230;
   --accent-bg: #fff7ed;
   --accent-border: #8f2624;
@@ -27,24 +30,16 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+:root[data-theme='dark'] {
+  --text: #cbd5e1;
+  --text-h: #f8fafc;
+  --bg: #020618;
+  --surface: #0f172a;
+  --surface-muted: rgb(15 23 42 / 82%);
+  --border: #334155;
+  --border-strong: #475569;
+  --accent-bg: #451a16;
+  color-scheme: dark;
 }
 
 #root {
@@ -57,6 +52,8 @@
 
 body {
   margin: 0;
+  background: var(--bg);
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html,
@@ -108,11 +105,50 @@ code {
 }
 
 .app-shell {
-  width: min(100% - 24px, 48rem);
+  width: min(calc(100% - 2rem), 48rem);
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
   padding: 1.5rem 0;
+  box-sizing: border-box;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  color: var(--text-h);
+  background: var(--surface);
+  box-shadow: 0 4px 8px rgb(2 6 23 / 8%);
+  cursor: pointer;
+  font: 600 0.75rem/1 var(--sans);
+  transition:
+    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.theme-toggle span:first-child {
+  color: var(--accent);
+  font-size: 1rem;
 }
 
 .eyebrow {
@@ -127,10 +163,13 @@ code {
   color: var(--text-h);
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 1;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .intro {
   max-width: 32rem;
+  width: 100%;
   margin: 0;
   color: var(--text);
   font-size: 0.95rem;
@@ -157,7 +196,7 @@ code {
   border: 0;
   border-radius: 9999px;
   color: #fff;
-  background: #0f172a;
+  background: #020618;
   box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a;
   cursor: pointer;
   font: 600 1rem/1.5 var(--sans);
@@ -224,11 +263,15 @@ code {
 }
 
 .kan-toast {
+  display: flex !important;
   align-items: flex-start !important;
   text-align: left !important;
 }
 
 .kan-toast__content {
+  display: flex !important;
+  flex: 1 !important;
+  justify-content: flex-start !important;
   align-items: flex-start !important;
   text-align: left !important;
 }
@@ -239,8 +282,14 @@ code {
 }
 
 .kan-toast__icon {
+  display: flex !important;
   align-self: flex-start !important;
   margin-top: 0.15rem !important;
+}
+
+.kan-toast [data-title],
+.kan-toast [data-description] {
+  text-align: left !important;
 }
 
 .results-panel {
@@ -252,7 +301,7 @@ code {
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
-  background: rgb(248 250 252 / 70%);
+  background: var(--surface-muted);
   box-sizing: border-box;
   text-align: left;
 }
@@ -277,9 +326,9 @@ code {
   grid-template-columns: 4.25rem 1fr;
   gap: 1rem;
   padding: 1rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--surface);
 }
 
 .event-card__date {
@@ -302,6 +351,25 @@ code {
   color: var(--text-h);
   font-size: 1.1rem;
   line-height: 1.25;
+}
+
+.results-pitch {
+  margin: 0 0 1rem;
+  color: var(--text-h);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.event-card__link {
+  display: inline-block;
+  margin-top: 0.6rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.event-card__link:hover {
+  color: var(--accent-border);
 }
 
 .event-card__meta,
@@ -335,12 +403,14 @@ code {
 
 @media (max-width: 639px) {
   .app-shell {
-    width: 100%;
-    padding-inline: 1rem;
+    width: calc(100% - 2rem);
+    padding-inline: 0;
   }
 
   .talk-button {
-    width: 100%;
+    width: min(100%, 22rem);
+    max-width: 100%;
+    padding-inline: 1rem;
   }
 
   .results-panel {
