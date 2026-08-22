@@ -166,7 +166,7 @@ The source uses a standard 150ms transition with `cubic-bezier(.4, 0, .2, 1)` an
 
 Every interactive component should define default, hover, focus-visible, active, disabled, loading, error, and success behavior where applicable. Focus must be visible, and keyboard behavior must remain correct.
 
-The primary button uses a restrained 2px hover lift, a terracotta active/listening state, a soft terracotta focus halo, and a subtle pulse on its listening indicator. Respect `prefers-reduced-motion`.
+The primary button uses a restrained 2px hover lift, a terracotta active/listening state, and a soft terracotta focus halo. Its listening indicator remains static during silence and scales only from the measured microphone signal after a small noise gate. Respect `prefers-reduced-motion`.
 
 While the request is in flight, the button is disabled, uses a slate searching surface, displays a small circular loader, and reads `Searching…`. Until the backend is connected, the page uses a local fixture containing Kyoto meetup events to preview the final result presentation.
 

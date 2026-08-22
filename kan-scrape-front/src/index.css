@@ -214,10 +214,6 @@ code {
   animation: spin 0.8s linear infinite;
 }
 
-.is-listening .talk-button__dot {
-  animation: pulse 1s ease-in-out infinite;
-}
-
 .response {
   max-width: 36rem;
   max-height: 30vh;
@@ -318,13 +314,6 @@ code {
 
 .event-card__description {
   color: #64748b;
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-    transform: scale(0.7);
-  }
 }
 
 @keyframes spin {

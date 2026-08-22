@@ -168,7 +168,10 @@ function App() {
         return total + normalized * normalized
       }, 0)
       const rms = Math.sqrt(sum / data.length)
-      setVoiceLevel((current) => current * 0.65 + Math.min(rms * 3, 1) * 0.35)
+      const noiseGate = 0.045
+      const audibleLevel =
+        rms > noiseGate ? Math.min((rms - noiseGate) * 5, 1) : 0
+      setVoiceLevel(audibleLevel)
       meterFrameRef.current = requestAnimationFrame(measure)
     }
 
