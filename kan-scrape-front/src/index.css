@@ -60,6 +60,12 @@ body {
   margin: 0;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 h1,
 h2 {
   font-family: var(--heading);
@@ -106,9 +112,10 @@ code {
 
 .app-shell {
   width: min(100% - 24px, 72rem);
-  min-height: 100svh;
+  height: 100dvh;
+  min-height: 0;
   margin: 0 auto;
-  padding: 8rem 0 4rem;
+  padding: 1.5rem 0;
 }
 
 .eyebrow {
@@ -197,6 +204,8 @@ code {
 
 .response {
   max-width: 36rem;
+  max-height: 30vh;
+  overflow: auto;
   margin: 0;
   color: var(--text);
   font-size: 0.875rem;

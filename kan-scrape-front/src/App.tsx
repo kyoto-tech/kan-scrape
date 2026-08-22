@@ -1,4 +1,8 @@
-import { type KeyboardEvent, useRef, useState } from 'react'
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
+import { useRef, useState } from 'react'
+
+gsap.registerPlugin(useGSAP)
 
 type RecognitionResult = {
   isFinal: boolean
@@ -37,10 +41,40 @@ function App() {
   const [result, setResult] = useState('')
   const recognitionRef = useRef<Recognition | null>(null)
   const transcriptRef = useRef('')
-  const activePointerRef = useRef(false)
+  const appRef = useRef<HTMLElement | null>(null)
+  const titleRef = useRef<HTMLHeadingElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+
+  useGSAP(
+    () => {
+      const reduceMotion = window.matchMedia(
+        '(prefers-reduced-motion: reduce)',
+      ).matches
+
+      if (reduceMotion) return
+
+      const intro = gsap.timeline({ defaults: { ease: 'power3.out' } })
+      intro.from(titleRef.current, {
+        autoAlpha: 0,
+        y: -32,
+        duration: 0.75,
+      })
+      intro.from(
+        buttonRef.current,
+        {
+          autoAlpha: 0,
+          scale: 0.35,
+          duration: 0.9,
+          ease: 'back.out(1.7)',
+        },
+        '-=0.3',
+      )
+    },
+    { scope: appRef },
+  )
 
   const startListening = () => {
-    if (activePointerRef.current || isListening) return
+    if (isListening) return
 
     const Recognition =
       window.SpeechRecognition ?? window.webkitSpeechRecognition
@@ -50,7 +84,6 @@ function App() {
       return
     }
 
-    activePointerRef.current = true
     transcriptRef.current = ''
     setMessage('')
 
@@ -74,9 +107,6 @@ function App() {
   }
 
   const stopListening = async () => {
-    if (!activePointerRef.current) return
-
-    activePointerRef.current = false
     recognitionRef.current?.stop()
     recognitionRef.current = null
     setIsListening(false)
@@ -103,34 +133,28 @@ function App() {
     }
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault()
-      startListening()
-    }
-  }
-
-  const handleKeyUp = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === ' ' || event.key === 'Enter') {
-      event.preventDefault()
+  const toggleListening = () => {
+    if (isListening) {
       void stopListening()
+      return
     }
+
+    startListening()
   }
 
   return (
-    <main className="app-shell">
+    <main ref={appRef} className="app-shell">
+      <h1 ref={titleRef}>Kyoto Meetup Finder</h1>
       <button
+        ref={buttonRef}
         className={`talk-button${isListening ? ' is-listening' : ''}`}
         type="button"
-        aria-label={isListening ? 'Release to send' : 'Hold to speak'}
-        onPointerDown={startListening}
-        onPointerUp={() => void stopListening()}
-        onPointerCancel={() => void stopListening()}
-        onKeyDown={handleKeyDown}
-        onKeyUp={handleKeyUp}
+        aria-pressed={isListening}
+        aria-label={isListening ? 'Stop listening and send' : 'Start listening'}
+        onClick={toggleListening}
       >
         <span aria-hidden="true" className="talk-button__dot" />
-        {isListening ? 'Listening…' : 'Hold to speak'}
+        {isListening ? 'Stop and search' : 'Start speaking'}
       </button>
       {(message || result) && (
         <output className="response">

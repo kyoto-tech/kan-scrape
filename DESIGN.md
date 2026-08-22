@@ -15,16 +15,18 @@ This design reference is based on the public Kyoto Tech Meetup website: <https:/
 
 ## Current interface challenge
 
-The initial interface is deliberately only one action: a single hold-to-speak button centered on the page. There is no navigation, form, dashboard, decorative card, or secondary CTA.
+The initial interface is deliberately only one action: a single toggle-to-speak button centered on the viewport, with the title `Kyoto Meetup Finder` above it. There is no navigation, form, dashboard, decorative card, or secondary CTA.
 
 Interaction sequence:
 
-1. Press and hold the button.
-2. Capture speech while it is held.
-3. Release to stop capture and send `POST /api/scrape` with `{ "message": "..." }`.
+1. Click the button once to start capture.
+2. Keep speaking while the button is in its listening state.
+3. Click the button again to stop capture and send `POST /api/scrape` with `{ "message": "..." }`.
 4. Keep the same page and show the backend's `{ "result": "..." }` response when processing finishes.
 
-The button is the only initial visible control. Its label and state may change between `Hold to speak`, `Listening…`, and a recoverable error. A result may appear after submission.
+The button is the only initial visible control. Its label and state may change between `Start speaking`, `Listening…`, `Stop and search`, and a recoverable error. A result may appear after submission.
+
+The page occupies exactly the viewport using `100dvh` and does not scroll. The title and button enter once on first load: the title uses a top fade-in and the button uses a zoom-in. GSAP handles the entrance timeline and skips it when `prefers-reduced-motion: reduce` is active.
 
 ## Colors
 
