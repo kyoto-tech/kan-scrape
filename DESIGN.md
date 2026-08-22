@@ -13,23 +13,6 @@ This design reference is based on the public Kyoto Tech Meetup website: <https:/
 - Compact event metadata with clear date, venue, RSVP, and action hierarchy.
 - Responsive layouts that support short mobile labels and longer English/Japanese content.
 
-## Current interface challenge
-
-The initial interface is deliberately only one action: a single toggle-to-speak button centered on the viewport, with the title `Kyoto Meetup Finder` and one short description above it. There is no navigation, form, dashboard, decorative card, or secondary CTA.
-
-Interaction sequence:
-
-1. Click the button once to start capture.
-2. Keep speaking while the button is in its listening state.
-3. Click the button again to stop capture and send `POST /api/scrape` with `{ "message": "..." }`.
-4. Keep the same page and show the backend's `{ "result": "..." }` response when processing finishes.
-
-The button is the only initial visible control. Its label and state may change between `Start speaking`, `Listening…`, `Stop and search`, `Searching…`, and a recoverable error. A result may appear after submission. An empty transcript must not show a persistent instructional message; the user can simply try again.
-
-The content container is capped at 768px (`48rem`). Below 640px it uses the full available width with 16px horizontal padding, and the button fills that mobile width.
-
-The page occupies exactly the viewport using `100dvh` and does not scroll. On first load, GSAP reveals the title first, then the description, then the button. The title and description use a long top fade-in; the button uses only a distinctive fade-in from a brief blur state and must not zoom or scale during entrance. The timeline skips animation when `prefers-reduced-motion: reduce` is active.
-
 ## Colors
 
 ### Brand
@@ -165,26 +148,6 @@ Use `1px solid slate-200` for default borders and `1px solid accent` for selecte
 The source uses a standard 150ms transition with `cubic-bezier(.4, 0, .2, 1)` and occasional 300ms image transitions. Use restrained hover feedback: color, border, opacity, a maximum 2px lift, or a subtle image scale. Respect `prefers-reduced-motion`.
 
 Every interactive component should define default, hover, focus-visible, active, disabled, loading, error, and success behavior where applicable. Focus must be visible, and keyboard behavior must remain correct.
-
-The primary button uses a restrained 2px hover lift, a terracotta active/listening state, and a soft terracotta focus halo. Its listening indicator remains static during silence and scales only from the measured microphone signal after a small noise gate. Respect `prefers-reduced-motion`.
-
-While the request is in flight, the button is disabled, uses a slate searching surface, displays a small circular loader, and reads `Searching…`. Until the backend is connected, the page uses a local fixture containing Kyoto meetup events to preview the final result presentation.
-
-While listening, the button indicator uses the microphone's live audio level. Silence keeps the dot at its resting scale; speech increases it subtly up to a restrained maximum. The microphone stream and audio context must be released as soon as listening stops.
-
-## Toast feedback
-
-Use Sonner with a single `<Toaster position="top-right" theme="light" />`. Success, error, and empty-input feedback appear as toasts rather than persistent text below the button. Toast text is left aligned and the icon sits at the top-left of the toast content. Match the system with light surfaces, dark slate text, terracotta error accents, restrained motion, and short descriptions.
-
-## Copy and typography rules
-
-- Avoid em dashes. Use commas, periods, colons, or parentheses instead.
-- Avoid all-uppercase interface copy. Use sentence case for headings, labels, statuses, categories, and toast titles.
-- Avoid decorative letter spacing. Use the natural tracking of the selected font.
-
-## Result presentation
-
-The demo result is a compact, scroll-safe event panel. It contains a small uppercase result heading, event count, and cards with date, category, title, venue, time, and a one-line description. The panel is secondary to the primary action and may appear only after a search completes.
 
 ## Component guidance
 
