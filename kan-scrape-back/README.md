@@ -30,6 +30,11 @@ ctranslate2 — the engine behind faster-whisper — has no Metal backend, which
 support goes through a separate `mlx-whisper` backend rather than a device flag. Both are hidden
 behind the same `SpeechToText` service, so nothing downstream changes.
 
+The MLX backend needs different model weights, so `WHISPER_MODEL` is mapped onto an
+`mlx-community` repo by `MLX_REPOS` in `app/services/stt.py` — defaulting to
+`mlx-community/whisper-large-v3-turbo`, the same model the CUDA path uses. Setting
+`WHISPER_MODEL` to a full `org/repo` id passes it straight through.
+
 ## Local development
 
 ```bash
@@ -95,7 +100,6 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `WHISPER_MODEL`         | `large-v3-turbo`               | faster-whisper model name (`small`/`tiny` on weak machines) |
 | `WHISPER_DEVICE`        | `auto`                         | `auto` \| `cuda` \| `mlx` \| `cpu`               |
 | `WHISPER_COMPUTE_TYPE`  | —                              | e.g. `float16`, `int8`                          |
-| `MLX_WHISPER_REPO`      | —                              | Override the guessed `mlx-community` HF repo    |
 | `STT_MAX_SECONDS`       | `60`                           | Longer clips are rejected with 413              |
 | `STT_WARMUP`            | `true`                         | Preload Whisper into VRAM in the background at boot; `false` = lazy |
 | `STT_FALLBACK`          | —                              | `voxtral` to enable the API fallback            |

@@ -268,13 +268,29 @@ async def test_mlx_failure_falls_back_to_cpu(monkeypatch: pytest.MonkeyPatch) ->
     assert (service.device, service.compute_type) == ("cpu", "int8")
 
 
-def test_mlx_repo_is_derived_from_the_model_name() -> None:
-    assert SpeechToText(_settings(whisper_model="tiny"))._mlx_repo() == "mlx-community/whisper-tiny"
-    assert (
-        SpeechToText(_settings(whisper_model="mlx-community/whisper-turbo"))._mlx_repo()
-        == "mlx-community/whisper-turbo"
-    )
-    assert SpeechToText(_settings(mlx_whisper_repo="me/custom"))._mlx_repo() == "me/custom"
+@pytest.mark.parametrize(
+    ("model", "repo"),
+    [
+        ("large-v3-turbo", "mlx-community/whisper-large-v3-turbo"),
+        ("tiny", "mlx-community/whisper-tiny-mlx"),
+        ("small", "mlx-community/whisper-small-mlx"),
+        ("large-v3", "mlx-community/whisper-large-v3-mlx"),
+        ("org/custom-whisper", "org/custom-whisper"),  # full repo id passes through
+    ],
+)
+def test_mlx_repo_mapping(model: str, repo: str) -> None:
+    assert SpeechToText(_settings(whisper_model=model))._mlx_repo() == repo
+
+
+def test_unknown_model_falls_back_to_the_default_repo() -> None:
+    service = SpeechToText(_settings(whisper_model="distil-large-v2"))
+
+    assert service._mlx_repo() == stt.MLX_DEFAULT_REPO == "mlx-community/whisper-large-v3-turbo"
+
+
+def test_the_default_model_has_an_mlx_repo() -> None:
+    """A default `uv sync --extra mlx` must not land on the fallback path."""
+    assert stt.MLX_REPOS[Settings().whisper_model] == stt.MLX_DEFAULT_REPO
 
 
 # --- route ---------------------------------------------------------------------------
