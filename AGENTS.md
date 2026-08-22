@@ -4,6 +4,8 @@
 
 `kan-scrape` is a monorepo for the Kyoto Tech Meetup community experience. The frontend currently lives in `kan-scrape-front/`; backend services will be added under a separate root directory when implemented.
 
+The current product challenge is intentionally narrow: the frontend interface must expose one primary control only. The user holds the button, speaks, releases it, and the captured request is sent to the backend. When the backend finishes thinking, its result is rendered on the same page.
+
 Read [`DESIGN.md`](./DESIGN.md) before changing visual tokens, typography, colors, spacing, responsive behavior, or interaction states. Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before contributing.
 
 ## Current stack
@@ -38,6 +40,9 @@ The backend is not implemented yet. Do not create backend conventions or depende
 - Use finite TypeScript unions for public visual variants.
 - Use the tokens and patterns in [`DESIGN.md`](./DESIGN.md); do not introduce arbitrary colors, fonts, spacing, radii, or animation timings.
 - Support English and Japanese content without hard-coded widths or fragile truncation.
+- Keep the initial surface to one visible button. Do not add navigation, forms, dashboards, decorative cards, or secondary actions.
+- The button must support pointer and keyboard press-and-hold interaction, visible listening state, `aria-label`, focus-visible styling, and reduced-motion behavior.
+- Keep backend communication behind a small request boundary; the current frontend endpoint is `POST /api/scrape` with `{ message }` and a `{ result }` response.
 - Do not add a dependency for a small utility unless repeated use justifies it.
 
 ## Verification

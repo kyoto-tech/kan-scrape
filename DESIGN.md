@@ -13,6 +13,19 @@ This design reference is based on the public Kyoto Tech Meetup website: <https:/
 - Compact event metadata with clear date, venue, RSVP, and action hierarchy.
 - Responsive layouts that support short mobile labels and longer English/Japanese content.
 
+## Current interface challenge
+
+The initial interface is deliberately only one action: a single hold-to-speak button centered on the page. There is no navigation, form, dashboard, decorative card, or secondary CTA.
+
+Interaction sequence:
+
+1. Press and hold the button.
+2. Capture speech while it is held.
+3. Release to stop capture and send `POST /api/scrape` with `{ "message": "..." }`.
+4. Keep the same page and show the backend's `{ "result": "..." }` response when processing finishes.
+
+The button is the only initial visible control. Its label and state may change between `Hold to speak`, `Listening…`, and a recoverable error. A result may appear after submission.
+
 ## Colors
 
 ### Brand
@@ -148,6 +161,8 @@ Use `1px solid slate-200` for default borders and `1px solid accent` for selecte
 The source uses a standard 150ms transition with `cubic-bezier(.4, 0, .2, 1)` and occasional 300ms image transitions. Use restrained hover feedback: color, border, opacity, a maximum 2px lift, or a subtle image scale. Respect `prefers-reduced-motion`.
 
 Every interactive component should define default, hover, focus-visible, active, disabled, loading, error, and success behavior where applicable. Focus must be visible, and keyboard behavior must remain correct.
+
+The primary button uses a restrained 2px hover lift, a terracotta active/listening state, a soft terracotta focus halo, and a subtle pulse on its listening indicator. Respect `prefers-reduced-motion`.
 
 ## Component guidance
 
