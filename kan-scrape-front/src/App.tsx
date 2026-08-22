@@ -1,7 +1,7 @@
 import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
 import { Toaster, toast } from 'sonner'
-import { useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 
 gsap.registerPlugin(useGSAP)
 
@@ -33,6 +33,10 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'n
 const timeFormatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
 
 function App() {
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const stored = window.localStorage.getItem('kan-scrape-theme')
+    return stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const [isListening, setIsListening] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [voiceLevel, setVoiceLevel] = useState(0)
@@ -47,6 +51,11 @@ function App() {
   const titleRef = useRef<HTMLHeadingElement | null>(null)
   const introRef = useRef<HTMLParagraphElement | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = isDarkMode ? 'dark' : 'light'
+    window.localStorage.setItem('kan-scrape-theme', isDarkMode ? 'dark' : 'light')
+  }, [isDarkMode])
 
   useGSAP(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -160,9 +169,19 @@ function App() {
 
   return (
     <main ref={appRef} className="app-shell">
+      <button
+        className="theme-toggle"
+        type="button"
+        aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-pressed={isDarkMode}
+        onClick={() => setIsDarkMode((current) => !current)}
+      >
+        <span aria-hidden="true">{isDarkMode ? '☀' : '◐'}</span>
+        <span>{isDarkMode ? 'Light mode' : 'Dark mode'}</span>
+      </button>
       <Toaster
         position="top-right"
-        theme="light"
+        theme={isDarkMode ? 'dark' : 'light'}
         richColors
         toastOptions={{
           duration: 4200,
