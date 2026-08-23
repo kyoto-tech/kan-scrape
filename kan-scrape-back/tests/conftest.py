@@ -10,7 +10,9 @@ from fastapi import testclient
 # kan-scrape-back/.env when a variable is absent, so a developer's real key would leak into
 # the test run. An empty environment variable wins over the dotenv file.
 os.environ["FETCH_REMOTE_SOURCES"] = "false"
+os.environ["SEED_EVENTS"] = "true"  # seed is dev-only by default; tests run on it exclusively
 os.environ["STT_WARMUP"] = "false"
+os.environ["LOG_FILE"] = ""
 os.environ["MISTRAL_API_KEY"] = ""
 os.environ["DOORKEEPER_TOKEN"] = ""
 os.environ["CONNPASS_API_KEY"] = ""

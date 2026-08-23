@@ -27,6 +27,7 @@ class Settings(pydantic_settings.BaseSettings):
     app_name: str = "Kan Scrape API"
     version: str = "0.1.0"
     debug: bool = False
+    log_file: str | None = "logs/kan-scrape.log"
     api_prefix: str = "/api"
     cors_origins: Annotated[list[str], pydantic_settings.NoDecode] = ["http://localhost:5173"]
 
@@ -47,6 +48,7 @@ class Settings(pydantic_settings.BaseSettings):
     edge_tts_voice: str = "en-US-AvaMultilingualNeural"
 
     # --- Event sources ---
+    seed_events: bool | None = None  # None = follow `debug`: fixture events only in dev
     doorkeeper_token: str | None = None
     connpass_api_key: str | None = None
     meetup_groups: Annotated[list[str], pydantic_settings.NoDecode] = DEFAULT_MEETUP_GROUPS
@@ -54,11 +56,30 @@ class Settings(pydantic_settings.BaseSettings):
     fetch_remote_sources: bool = True
     max_events_for_llm: int = 40
 
+    @property
+    def seed_enabled(self) -> bool:
+        """Whether the offline demo fixture ships as real events."""
+        return self.debug if self.seed_events is None else self.seed_events
+
     @pydantic.field_validator("cors_origins", "meetup_groups", mode="before")
     @classmethod
     def split_csv(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @pydantic.field_validator("seed_events", mode="before")
+    @classmethod
+    def empty_seed_events(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @pydantic.field_validator("log_file", mode="before")
+    @classmethod
+    def empty_log_file(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
         return value
 
 

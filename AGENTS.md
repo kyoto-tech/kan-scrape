@@ -20,7 +20,7 @@ The frontend is self-contained in `kan-scrape-front/`. Run frontend commands fro
 ### Backend
 
 - Python 3.12, FastAPI, uv (deps + lockfile), ruff, pytest
-- Event sources: seed fixture (always on), Meetup iCal, Doorkeeper / Connpass (optional API keys)
+- Event sources: seed fixture (dev only — `SEED_EVENTS=true` or `DEBUG=true`), Meetup iCal, Doorkeeper / Connpass (optional API keys)
 - Matching + pitch: Mistral (`MISTRAL_API_KEY`, function calling); STT: local faster-whisper (GPU); TTS: edge-tts
 - Spec: [`docs/handoff-backend.md`](./docs/handoff-backend.md), STT: [`docs/handoff-stt.md`](./docs/handoff-stt.md); endpoints in [`kan-scrape-back/README.md`](./kan-scrape-back/README.md)
 

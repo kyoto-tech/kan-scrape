@@ -40,7 +40,7 @@ The MLX backend needs different model weights, so `WHISPER_MODEL` is mapped onto
 ```bash
 cd kan-scrape-back
 uv sync
-cp .env.example .env   # optional — the app boots and serves seed events with no keys at all
+cp .env.example .env   # optional — with no keys the app still boots (set SEED_EVENTS=true for demo events)
 uv run uvicorn app.main:app --reload
 ```
 
@@ -77,7 +77,7 @@ Adapters live in `app/sources/`, all fail soft (log + return `[]`) and run concu
 
 | Source          | Key needed          | Notes                                                        |
 |-----------------|---------------------|--------------------------------------------------------------|
-| `seed`          | none                | `seed_events.json`, 20 Kansai events, dates relative to *now* |
+| `seed`          | none                | `seed_events.json`, 20 fictional Kansai demo events, dates relative to *now*. Dev only: served when `SEED_EVENTS=true` (or `DEBUG=true` and `SEED_EVENTS` unset) |
 | `meetup`        | none                | public iCal feeds of the groups in `MEETUP_GROUPS`            |
 | `doorkeeper`    | `DOORKEEPER_TOKEN`  | skipped when the token is missing                             |
 | `connpass`      | `CONNPASS_API_KEY`  | skipped when the key is missing                               |
@@ -108,12 +108,13 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `STT_WARMUP`            | `true`                         | Preload Whisper into VRAM in the background at boot; `false` = lazy |
 | `STT_FALLBACK`          | —                              | `voxtral` to enable the API fallback            |
 | `EDGE_TTS_VOICE`        | `en-US-AvaMultilingualNeural`  | Default `/api/speech` voice                    |
+| `SEED_EVENTS`           | follows `DEBUG`                | `true` → serve the fictional demo fixture      |
 | `DOORKEEPER_TOKEN`      | —                              | Enables the Doorkeeper adapter                 |
 | `CONNPASS_API_KEY`      | —                              | Enables the Connpass adapter                   |
 | `MEETUP_GROUPS`         | 9 verified Kansai slugs        | Comma-separated meetup.com group slugs         |
 | `HTTP_TIMEOUT_S`        | `10`                           | Per-request timeout for source adapters        |
 | `MAX_EVENTS_FOR_LLM`    | `40`                           | Events shown to the model per match            |
-| `FETCH_REMOTE_SOURCES`  | `true`                         | `false` → seed only, fully offline             |
+| `FETCH_REMOTE_SOURCES`  | `true`                         | `false` → fully offline (pair with `SEED_EVENTS=true` to still serve events) |
 
 ## Structure
 

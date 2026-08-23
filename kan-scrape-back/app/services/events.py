@@ -24,16 +24,19 @@ def build_remote_sources(settings: config.Settings) -> list[base.Source]:
 class EventStore:
     """Process-wide event cache.
 
-    The seed source loads synchronously (no network, always available); remote adapters are
-    refreshed in the background so startup never blocks on the network.
+    The seed source loads synchronously (no network, dev/debug only by default); remote
+    adapters are refreshed in the background so startup never blocks on the network.
     """
 
     def __init__(
         self,
         seed: seed_source.SeedSource | None = None,
         remote_sources: list[base.Source] | None = None,
+        *,
+        include_seed: bool = True,
     ) -> None:
         self._seed = seed if seed is not None else seed_source.SeedSource()
+        self._include_seed = include_seed
         self._remote_sources = remote_sources if remote_sources is not None else []
         self._seed_events: list[event_schema.Event] = []
         self._remote_events: list[event_schema.Event] = []
@@ -48,7 +51,15 @@ class EventStore:
         self._per_source["seed"] = len(self._seed_events)
 
     def load_seed(self) -> int:
-        """Synchronous, offline seed load. Safe to call during app startup."""
+        """Synchronous, offline seed load. Safe to call during app startup.
+
+        A no-op (0 events) when the store was built with ``include_seed=False`` —
+        outside dev the fixture events must not mix with the scraped ones.
+        """
+        if not self._include_seed:
+            self._seed_events = []
+            self._per_source[self._seed.name] = 0
+            return 0
         self._seed_events = self._seed.load()
         self._per_source[self._seed.name] = len(self._seed_events)
         return len(self._seed_events)
@@ -111,4 +122,4 @@ class EventStore:
 
 def build_store(settings: config.Settings, *, with_remote: bool = True) -> EventStore:
     remote = build_remote_sources(settings) if with_remote else []
-    return EventStore(seed_source.SeedSource(), remote)
+    return EventStore(seed_source.SeedSource(), remote, include_seed=settings.seed_enabled)
