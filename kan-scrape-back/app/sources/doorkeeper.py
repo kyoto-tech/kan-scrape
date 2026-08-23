@@ -1,22 +1,13 @@
 """Doorkeeper API adapter — requires DOORKEEPER_TOKEN, skipped when absent."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from typing import Any
 
 import httpx
 
-from app.schemas.event import Event
-from app.sources.base import (
-    clean_text,
-    guess_city,
-    guess_lang,
-    make_id,
-    now_jst,
-    parse_iso,
-)
+from app.schemas import event as event_schema
+from app.sources import base
 
 logger = logging.getLogger(__name__)
 
@@ -25,39 +16,41 @@ PREFECTURES = ("kyoto", "osaka", "hyogo")
 _PREFECTURE_CITY = {"kyoto": "Kyoto", "osaka": "Osaka", "hyogo": "Kobe"}
 
 
-def parse_events(payload: Any, prefecture: str | None = None) -> list[Event]:
+def parse_events(payload: Any, prefecture: str | None = None) -> list[event_schema.Event]:
     """Parse a Doorkeeper `[{"event": {...}}, ...]` payload. Never raises."""
     if not isinstance(payload, list):
         logger.warning("Unexpected Doorkeeper payload type: %s", type(payload).__name__)
         return []
 
-    events: list[Event] = []
+    events: list[event_schema.Event] = []
     for entry in payload:
         try:
             raw = entry.get("event") if isinstance(entry, dict) else None
             if not isinstance(raw, dict):
                 continue
             title = raw.get("title")
-            starts_at = parse_iso(raw.get("starts_at"))
+            starts_at = base.parse_iso(raw.get("starts_at"))
             if not title or starts_at is None:
                 continue
             location = raw.get("venue_name") or raw.get("address")
-            description = clean_text(raw.get("description"))
+            description = base.clean_text(raw.get("description"))
             url = raw.get("public_url")
             fallback_city = _PREFECTURE_CITY.get(prefecture or "", "Other")
             events.append(
-                Event(
-                    id=make_id("doorkeeper", raw.get("id") or f"{title}|{starts_at.isoformat()}"),
+                event_schema.Event(
+                    id=base.make_id(
+                        "doorkeeper", raw.get("id") or f"{title}|{starts_at.isoformat()}"
+                    ),
                     title=title,
                     starts_at=starts_at,
-                    ends_at=parse_iso(raw.get("ends_at")),
-                    location=clean_text(location, limit=200),
+                    ends_at=base.parse_iso(raw.get("ends_at")),
+                    location=base.clean_text(location, limit=200),
                     url=url if isinstance(url, str) and url.startswith("http") else None,
                     source="doorkeeper",
                     description=description,
-                    city=guess_city(location, raw.get("address"), title) or fallback_city,
+                    city=base.guess_city(location, raw.get("address"), title) or fallback_city,
                     tags=["doorkeeper"] + ([prefecture] if prefecture else []),
-                    lang=guess_lang(title, description),
+                    lang=base.guess_lang(title, description),
                 )
             )
         except Exception:  # noqa: BLE001 - skip the bad row, keep the feed
@@ -76,10 +69,12 @@ class DoorkeeperSource:
     def enabled(self) -> bool:
         return bool(self.token)
 
-    async def _fetch_one(self, client: httpx.AsyncClient, prefecture: str) -> list[Event]:
+    async def _fetch_one(
+        self, client: httpx.AsyncClient, prefecture: str
+    ) -> list[event_schema.Event]:
         params = {
             "prefecture": prefecture,
-            "since": now_jst().date().isoformat(),
+            "since": base.now_jst().date().isoformat(),
             "sort": "starts_at",
             "locale": "en",
         }
@@ -93,7 +88,7 @@ class DoorkeeperSource:
             logger.warning("Doorkeeper %s fetch failed", prefecture, exc_info=True)
             return []
 
-    async def fetch(self) -> list[Event]:
+    async def fetch(self) -> list[event_schema.Event]:
         if not self.enabled:
             logger.info("Doorkeeper source skipped (no DOORKEEPER_TOKEN)")
             return []
@@ -108,7 +103,7 @@ class DoorkeeperSource:
             logger.exception("Doorkeeper source failed")
             return []
 
-        events: list[Event] = []
+        events: list[event_schema.Event] = []
         for result in results:
             if isinstance(result, BaseException):
                 logger.warning("Doorkeeper prefecture fetch failed: %s", result)

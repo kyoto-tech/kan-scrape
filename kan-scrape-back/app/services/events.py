@@ -1,31 +1,23 @@
 """In-memory event registry: runs every source adapter and caches the result."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import random
-from typing import TYPE_CHECKING
 
-from app.schemas.event import City, Event
-from app.sources.base import Source, dedupe, upcoming
-from app.sources.connpass import ConnpassSource
-from app.sources.doorkeeper import DoorkeeperSource
-from app.sources.meetup_ical import MeetupICalSource
-from app.sources.seed import SeedSource
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from app.core.config import Settings
+from app.core import config
+from app.schemas import event as event_schema
+from app.sources import base, connpass, doorkeeper, meetup_ical
+from app.sources import seed as seed_source
 
 logger = logging.getLogger(__name__)
 
 
-def build_remote_sources(settings: Settings) -> list[Source]:
+def build_remote_sources(settings: config.Settings) -> list[base.Source]:
     """Every network-backed adapter. Disabled ones still report a 0 count."""
     return [
-        MeetupICalSource(settings.meetup_groups, timeout_s=settings.http_timeout_s),
-        DoorkeeperSource(settings.doorkeeper_token, timeout_s=settings.http_timeout_s),
-        ConnpassSource(settings.connpass_api_key, timeout_s=settings.http_timeout_s),
+        meetup_ical.MeetupICalSource(settings.meetup_groups, timeout_s=settings.http_timeout_s),
+        doorkeeper.DoorkeeperSource(settings.doorkeeper_token, timeout_s=settings.http_timeout_s),
+        connpass.ConnpassSource(settings.connpass_api_key, timeout_s=settings.http_timeout_s),
     ]
 
 
@@ -38,19 +30,19 @@ class EventStore:
 
     def __init__(
         self,
-        seed: SeedSource | None = None,
-        remote_sources: list[Source] | None = None,
+        seed: seed_source.SeedSource | None = None,
+        remote_sources: list[base.Source] | None = None,
     ) -> None:
-        self._seed = seed if seed is not None else SeedSource()
+        self._seed = seed if seed is not None else seed_source.SeedSource()
         self._remote_sources = remote_sources if remote_sources is not None else []
-        self._seed_events: list[Event] = []
-        self._remote_events: list[Event] = []
+        self._seed_events: list[event_schema.Event] = []
+        self._remote_events: list[event_schema.Event] = []
         self._per_source: dict[str, int] = {}
         self._lock = asyncio.Lock()
 
     # --- loading -------------------------------------------------------------
 
-    def set_seed_events(self, events: list[Event]) -> None:
+    def set_seed_events(self, events: list[event_schema.Event]) -> None:
         """Replace the always-on event set. Handy for tests and manual seeding."""
         self._seed_events = list(events)
         self._per_source["seed"] = len(self._seed_events)
@@ -71,7 +63,7 @@ class EventStore:
                 *(source.fetch() for source in self._remote_sources),
                 return_exceptions=True,
             )
-            collected: list[Event] = []
+            collected: list[event_schema.Event] = []
             for source, result in zip(self._remote_sources, results, strict=True):
                 if isinstance(result, BaseException):
                     logger.warning("Source %s failed: %s", source.name, result)
@@ -89,20 +81,20 @@ class EventStore:
     def per_source(self) -> dict[str, int]:
         return dict(self._per_source)
 
-    def all(self, *, city: str | None = None, limit: int | None = None) -> list[Event]:
+    def all(self, *, city: str | None = None, limit: int | None = None) -> list[event_schema.Event]:
         """Deduped, future-only, sorted by start time. Never raises — the demo must not 500.
 
         Filter first, dedupe second: `dedupe` keeps the first match, so running it on the raw
         list lets a past event shadow the upcoming one it shares a title and day with.
         """
         try:
-            events = dedupe(upcoming([*self._seed_events, *self._remote_events]))
+            events = base.dedupe(base.upcoming([*self._seed_events, *self._remote_events]))
         except Exception:  # noqa: BLE001 - a poisoned cache entry must not take the API down
             logger.exception("Event cache is unreadable — serving no events")
             return []
         if city:
             wanted = city.strip().casefold()
-            events = [e for e in events if e.city and e.city.casefold() == wanted]
+            events = [item for item in events if item.city and item.city.casefold() == wanted]
         if limit is not None and limit >= 0:
             events = events[:limit]
         return events
@@ -110,13 +102,13 @@ class EventStore:
     def count(self) -> int:
         return len(self.all())
 
-    def random_event(self, *, city: City | None = None) -> Event | None:
+    def random_event(self, *, city: event_schema.City | None = None) -> event_schema.Event | None:
         events = self.all(city=city)
         if not events:
             return None
         return random.choice(events)
 
 
-def build_store(settings: Settings, *, with_remote: bool = True) -> EventStore:
+def build_store(settings: config.Settings, *, with_remote: bool = True) -> EventStore:
     remote = build_remote_sources(settings) if with_remote else []
-    return EventStore(SeedSource(), remote)
+    return EventStore(seed_source.SeedSource(), remote)

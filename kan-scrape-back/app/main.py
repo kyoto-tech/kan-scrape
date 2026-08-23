@@ -3,21 +3,19 @@
 Startup loads the seed synchronously and refreshes remote sources in the background.
 """
 
-from __future__ import annotations
-
 import asyncio
+import contextlib
 import inspect
 import logging
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager, suppress
+from collections import abc
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import fastapi
+from fastapi.middleware import cors
 
-from app.api.router import api_router
-from app.core.config import Settings, get_settings
-from app.services.events import build_store
+from app.api import router
+from app.core import config
+from app.services import events as event_service
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +37,10 @@ async def _warmup_stt() -> None:
         logger.warning("STT warmup failed", exc_info=True)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings: Settings = get_settings()
-    store = build_store(settings, with_remote=settings.fetch_remote_sources)
+@contextlib.asynccontextmanager
+async def lifespan(app: fastapi.FastAPI) -> abc.AsyncIterator[None]:
+    settings: config.Settings = config.get_settings()
+    store = event_service.build_store(settings, with_remote=settings.fetch_remote_sources)
     store.load_seed()
     app.state.event_store = store
 
@@ -62,14 +60,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for task in tasks:
             task.cancel()
         for task in tasks:
-            with suppress(asyncio.CancelledError, Exception):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
 
-def create_app() -> FastAPI:
-    settings = get_settings()
+def create_app() -> fastapi.FastAPI:
+    settings = config.get_settings()
     logging.basicConfig(level=logging.DEBUG if settings.debug else logging.INFO)
-    app = FastAPI(
+    app = fastapi.FastAPI(
         title=settings.app_name,
         version=settings.version,
         debug=settings.debug,
@@ -77,7 +75,7 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(
-        CORSMiddleware,
+        cors.CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
         allow_credentials=True,
@@ -85,7 +83,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(api_router, prefix=settings.api_prefix)
+    app.include_router(router.api_router, prefix=settings.api_prefix)
     return app
 
 

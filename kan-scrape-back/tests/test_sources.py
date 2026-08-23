@@ -1,11 +1,10 @@
 """Adapter parsing tests — pure string/JSON fixtures, no network."""
 
-from datetime import timedelta
+import datetime
 
-from app.sources import connpass, doorkeeper
-from app.sources.base import dedupe, guess_city, guess_lang, make_id, now_jst, upcoming
-from app.sources.meetup_ical import parse_ical
-from app.sources.seed import SeedSource
+from app.schemas import event as event_schema
+from app.sources import base, connpass, doorkeeper, meetup_ical
+from app.sources import seed as seed_source
 
 ICAL_FIXTURE = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -71,7 +70,7 @@ CONNPASS_FIXTURE = {
 
 
 def test_parse_ical() -> None:
-    events = parse_ical(ICAL_FIXTURE, "kyoto-tech-meetup")
+    events = meetup_ical.parse_ical(ICAL_FIXTURE, "kyoto-tech-meetup")
     assert len(events) == 2
     first = events[0]
     assert first.title == "Kyoto Tech Meetup #42"
@@ -122,7 +121,7 @@ END:VCALENDAR
 def test_parse_ical_real_meetup_feed() -> None:
     """Shape of a live Meetup feed: TZID start, no LOCATION, folded/escaped description,
     `URL;VALUE=URI` whose urlname differs from the feed slug, `event_<id>@meetup.com` uid."""
-    events = parse_ical(REAL_ICAL_FIXTURE, "osaka-web-designers-and-developers-meetup")
+    events = meetup_ical.parse_ical(REAL_ICAL_FIXTURE, "osaka-web-designers-and-developers-meetup")
     assert len(events) == 1
     event = events[0]
     assert event.title == "Git Workshop Day"
@@ -132,7 +131,7 @@ def test_parse_ical_real_meetup_feed() -> None:
     # City falls back to the calendar name / feed slug when the event carries no location.
     assert event.city == "Osaka"
     assert str(event.url) == "https://www.meetup.com/oktech/events/314843745/"
-    assert event.id == make_id("meetup", "event_314843745@meetup.com")
+    assert event.id == base.make_id("meetup", "event_314843745@meetup.com")
     description = event.description or ""
     assert "\\n" not in description and "\\," not in description
     assert "Grab your laptop and join us" in description
@@ -140,7 +139,7 @@ def test_parse_ical_real_meetup_feed() -> None:
 
 
 def test_parse_ical_garbage_returns_empty() -> None:
-    assert parse_ical("not a calendar at all") == []
+    assert meetup_ical.parse_ical("not a calendar at all") == []
 
 
 def test_parse_doorkeeper() -> None:
@@ -180,31 +179,29 @@ async def test_disabled_remote_adapters_return_empty() -> None:
 
 
 def test_seed_source_is_relative_to_now() -> None:
-    events = SeedSource().load()
+    events = seed_source.SeedSource().load()
     assert len(events) >= 15
-    now = now_jst()
+    now = base.now_jst()
     assert all(event.starts_at > now for event in events)
-    assert all(event.starts_at < now + timedelta(days=40) for event in events)
+    assert all(event.starts_at < now + datetime.timedelta(days=40) for event in events)
     assert len({event.id for event in events}) == len(events)
     assert {event.city for event in events} >= {"Kyoto", "Osaka", "Kobe"}
 
 
 def test_helpers() -> None:
-    assert guess_city("Sannomiya, Kobe") == "Kobe"
-    assert guess_city("") is None
-    assert guess_lang("完全に日本語のイベント") == "ja"
-    assert guess_lang("A fully English event description here") == "en"
-    events = SeedSource().load()
-    assert dedupe(events + events) == events
-    assert upcoming(events, horizon_days=3) == [
-        e for e in events if e.starts_at <= now_jst() + timedelta(days=3)
+    assert base.guess_city("Sannomiya, Kobe") == "Kobe"
+    assert base.guess_city("") is None
+    assert base.guess_lang("完全に日本語のイベント") == "ja"
+    assert base.guess_lang("A fully English event description here") == "en"
+    events = seed_source.SeedSource().load()
+    assert base.dedupe(events + events) == events
+    assert base.upcoming(events, horizon_days=3) == [
+        e for e in events if e.starts_at <= base.now_jst() + datetime.timedelta(days=3)
     ]
 
 
 async def test_meetup_source_without_slugs() -> None:
-    from app.sources.meetup_ical import MeetupICalSource
-
-    assert await MeetupICalSource([]).fetch() == []
+    assert await meetup_ical.MeetupICalSource([]).fetch() == []
 
 
 def test_malformed_urls_do_not_drop_the_event() -> None:
@@ -228,8 +225,8 @@ def test_malformed_urls_do_not_drop_the_event() -> None:
 
 def test_upcoming_with_zero_horizon_keeps_nothing_later() -> None:
     """`horizon_days=0` means "nothing after now", not "no horizon at all"."""
-    from app.schemas.event import Event
-
-    later = Event(id="a:1", title="Later", starts_at=now_jst() + timedelta(days=1), source="a")
-    assert upcoming([later], horizon_days=0) == []
-    assert upcoming([later]) == [later]
+    later = event_schema.Event(
+        id="a:1", title="Later", starts_at=base.now_jst() + datetime.timedelta(days=1), source="a"
+    )
+    assert base.upcoming([later], horizon_days=0) == []
+    assert base.upcoming([later]) == [later]

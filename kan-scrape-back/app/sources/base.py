@@ -1,15 +1,13 @@
 """Shared plumbing for event source adapters."""
 
-from __future__ import annotations
-
+import datetime
 import hashlib
 import logging
 import re
-from collections.abc import Iterable
-from datetime import date, datetime, timedelta
+from collections import abc
 from typing import Protocol, runtime_checkable
 
-from app.schemas.event import JST, City, Event, Lang
+from app.schemas import event as event_schema
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,9 @@ __all__ = [
     "upcoming",
 ]
 
-_CITY_HINTS: list[tuple[City, tuple[str, ...]]] = [
+JST = event_schema.JST
+
+_CITY_HINTS: list[tuple[event_schema.City, tuple[str, ...]]] = [
     ("Kyoto", ("kyoto", "京都", "kawaramachi", "gion", "arashiyama", "uji")),
     ("Osaka", ("osaka", "大阪", "umeda", "namba", "shinsaibashi", "tennoji", "sakai", "梅田")),
     ("Kobe", ("kobe", "神戸", "sannomiya", "三宮", "hyogo", "兵庫", "himeji")),
@@ -47,11 +47,11 @@ class Source(Protocol):
 
     name: str
 
-    async def fetch(self) -> list[Event]: ...
+    async def fetch(self) -> list[event_schema.Event]: ...
 
 
-def now_jst() -> datetime:
-    return datetime.now(tz=JST)
+def now_jst() -> datetime.datetime:
+    return datetime.datetime.now(tz=JST)
 
 
 def make_id(source: str, *parts: object) -> str:
@@ -60,31 +60,31 @@ def make_id(source: str, *parts: object) -> str:
     return f"{source}:{digest}"
 
 
-def ensure_aware(value: datetime | date | None) -> datetime | None:
+def ensure_aware(value: datetime.datetime | datetime.date | None) -> datetime.datetime | None:
     """Normalise a date/datetime to a timezone-aware JST datetime."""
     if value is None:
         return None
-    if isinstance(value, datetime):
+    if isinstance(value, datetime.datetime):
         if value.tzinfo is None:
             return value.replace(tzinfo=JST)
         return value.astimezone(JST)
-    if isinstance(value, date):
-        return datetime(value.year, value.month, value.day, tzinfo=JST)
+    if isinstance(value, datetime.date):
+        return datetime.datetime(value.year, value.month, value.day, tzinfo=JST)
     return None
 
 
-def parse_iso(value: str | None) -> datetime | None:
+def parse_iso(value: str | None) -> datetime.datetime | None:
     if not value:
         return None
     text = value.strip().replace("Z", "+00:00")
     try:
-        return ensure_aware(datetime.fromisoformat(text))
+        return ensure_aware(datetime.datetime.fromisoformat(text))
     except ValueError:
         logger.debug("Could not parse datetime %r", value)
         return None
 
 
-def guess_city(*texts: str | None) -> City | None:
+def guess_city(*texts: str | None) -> event_schema.City | None:
     blob = " ".join(t for t in texts if t).lower()
     if not blob:
         return None
@@ -94,7 +94,7 @@ def guess_city(*texts: str | None) -> City | None:
     return None
 
 
-def guess_lang(*texts: str | None) -> Lang | None:
+def guess_lang(*texts: str | None) -> event_schema.Lang | None:
     blob = " ".join(t for t in texts if t)
     if not blob:
         return None
@@ -123,32 +123,34 @@ def normalise_title(title: str) -> str:
     return _WS.sub(" ", title).strip().casefold()
 
 
-def dedupe(events: Iterable[Event]) -> list[Event]:
+def dedupe(events: abc.Iterable[event_schema.Event]) -> list[event_schema.Event]:
     """Drop duplicates sharing a normalised title and start date.
 
     The *first* occurrence wins, so filter and sort before deduping — otherwise a finished
     copy of an event can shadow the upcoming one that shares its title and day.
     """
-    seen: set[tuple[str, date]] = set()
-    unique: list[Event] = []
-    for event in events:
-        key = (normalise_title(event.title), event.starts_at.astimezone(JST).date())
+    seen: set[tuple[str, datetime.date]] = set()
+    unique: list[event_schema.Event] = []
+    for item in events:
+        key = (normalise_title(item.title), item.starts_at.astimezone(JST).date())
         if key in seen:
             continue
         seen.add(key)
-        unique.append(event)
+        unique.append(item)
     return unique
 
 
-def upcoming(events: Iterable[Event], *, horizon_days: int | None = None) -> list[Event]:
+def upcoming(
+    events: abc.Iterable[event_schema.Event], *, horizon_days: int | None = None
+) -> list[event_schema.Event]:
     """Keep only events that have not started yet, sorted by start time."""
     now = now_jst()
-    limit = now + timedelta(days=horizon_days) if horizon_days is not None else None
+    limit = now + datetime.timedelta(days=horizon_days) if horizon_days is not None else None
     kept = [
-        event
-        for event in events
-        if event.starts_at.astimezone(JST) >= now
-        and (limit is None or event.starts_at.astimezone(JST) <= limit)
+        item
+        for item in events
+        if item.starts_at.astimezone(JST) >= now
+        and (limit is None or item.starts_at.astimezone(JST) <= limit)
     ]
-    kept.sort(key=lambda event: event.starts_at.astimezone(JST))
+    kept.sort(key=lambda item: item.starts_at.astimezone(JST))
     return kept

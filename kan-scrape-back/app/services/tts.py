@@ -1,12 +1,10 @@
 """edge-tts speech synthesis with a small in-memory cache."""
 
-from __future__ import annotations
-
 import asyncio
+import collections
 import hashlib
 import logging
-from collections import OrderedDict
-from collections.abc import Iterator
+from collections import abc
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +14,7 @@ CACHE_SIZE = 64
 # deadline the request stalls forever and the frontend never gets its 503 to fall back
 # to browser speechSynthesis.
 TIMEOUT_S = 15.0
-_CACHE: OrderedDict[str, bytes] = OrderedDict()
+_CACHE: collections.OrderedDict[str, bytes] = collections.OrderedDict()
 
 
 class TTSError(RuntimeError):
@@ -79,7 +77,7 @@ async def synthesize(text: str, voice: str) -> bytes:
     return audio
 
 
-def iter_chunks(audio: bytes, size: int = 16 * 1024) -> Iterator[bytes]:
+def iter_chunks(audio: bytes, size: int = 16 * 1024) -> abc.Iterator[bytes]:
     """Yield the buffer in chunks for a StreamingResponse."""
     for offset in range(0, len(audio), size):
         yield audio[offset : offset + size]

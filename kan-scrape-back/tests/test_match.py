@@ -1,28 +1,26 @@
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import testclient
 
-from app.core.config import Settings
-from app.services import matcher
-from app.services.stt import Transcript
+from app.core import config
+from app.services import matcher, stt
 
 
 @pytest.fixture
-def keyed_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def keyed_client(monkeypatch: pytest.MonkeyPatch) -> testclient.TestClient:
     """A client whose settings carry a (fake) Mistral key, so the LLM path is taken."""
-    from app.core.config import get_settings
+    from app import main
 
     monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-    get_settings.cache_clear()
-    from app.main import create_app
+    config.get_settings.cache_clear()
 
-    with TestClient(create_app()) as client:
+    with testclient.TestClient(main.create_app()) as client:
         yield client
-    get_settings.cache_clear()
+    config.get_settings.cache_clear()
 
 
-def test_match_text_without_api_key_is_random(client: TestClient) -> None:
+def test_match_text_without_api_key_is_random(client: testclient.TestClient) -> None:
     response = client.post("/api/match/text", json={"query": "python meetup in kyoto"})
     assert response.status_code == 200
     body = response.json()
@@ -31,11 +29,13 @@ def test_match_text_without_api_key_is_random(client: TestClient) -> None:
 
 
 def test_match_text_with_mocked_llm(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     known_id = keyed_client.get("/api/events").json()[0]["id"]
 
-    async def fake_call_llm(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def fake_call_llm(
+        query: str, events: list[Any], settings: config.Settings
+    ) -> dict[str, Any]:
         assert "kyoto" in query.lower()
         assert events
         return {"event_ids": [known_id, "bogus:id"], "pitch": "Go to this one on Friday."}
@@ -50,12 +50,14 @@ def test_match_text_with_mocked_llm(
 
 
 def test_match_text_single_event_id_is_a_match(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A single confident pick is a match, not a validation failure."""
     known_id = keyed_client.get("/api/events").json()[0]["id"]
 
-    async def fake_call_llm(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def fake_call_llm(
+        query: str, events: list[Any], settings: config.Settings
+    ) -> dict[str, Any]:
         return {"event_ids": [known_id], "pitch": "Jazz night in Kobe on Friday."}
 
     monkeypatch.setattr(matcher, "call_llm", fake_call_llm)
@@ -73,11 +75,11 @@ def test_pick_events_accepts_the_one_id_mistral_actually_returns() -> None:
 
 
 def test_match_text_llm_raising_falls_back_to_random(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[int] = []
 
-    async def boom(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def boom(query: str, events: list[Any], settings: config.Settings) -> dict[str, Any]:
         calls.append(1)
         raise RuntimeError("mistral is down")
 
@@ -89,9 +91,11 @@ def test_match_text_llm_raising_falls_back_to_random(
 
 
 def test_match_text_unknown_ids_fall_back_to_random(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def hallucinate(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def hallucinate(
+        query: str, events: list[Any], settings: config.Settings
+    ) -> dict[str, Any]:
         return {"event_ids": ["nope:1", "nope:2"], "pitch": "made up"}
 
     monkeypatch.setattr(matcher, "call_llm", hallucinate)
@@ -100,13 +104,15 @@ def test_match_text_unknown_ids_fall_back_to_random(
 
 
 def test_match_text_blank_pitch_falls_back_to_random(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An empty pitch would leave the frontend with nothing to speak — treat it as a failure."""
     known_id = keyed_client.get("/api/events").json()[0]["id"]
     calls: list[int] = []
 
-    async def blank_pitch(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def blank_pitch(
+        query: str, events: list[Any], settings: config.Settings
+    ) -> dict[str, Any]:
         calls.append(1)
         return {"event_ids": [known_id, "other:id"], "pitch": "  \n "}
 
@@ -117,23 +123,27 @@ def test_match_text_blank_pitch_falls_back_to_random(
     assert len(calls) == 2  # retried once before giving up
 
 
-def test_match_text_short_query_is_random(keyed_client: TestClient) -> None:
+def test_match_text_short_query_is_random(keyed_client: testclient.TestClient) -> None:
     body = keyed_client.post("/api/match/text", json={"query": "a"}).json()
     assert body["mode"] == "random"
 
 
 def test_match_voice_with_transcript(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ids = [event["id"] for event in keyed_client.get("/api/events").json()[:2]]
 
     async def fake_transcribe(
         data: bytes, filename: str | None = None, content_type: str | None = None
-    ) -> Transcript:
+    ) -> stt.Transcript:
         assert data == b"webm-bytes"
-        return Transcript(text="I want a python meetup in Kyoto", language="en", provider="whisper")
+        return stt.Transcript(
+            text="I want a python meetup in Kyoto", language="en", provider="whisper"
+        )
 
-    async def fake_call_llm(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def fake_call_llm(
+        query: str, events: list[Any], settings: config.Settings
+    ) -> dict[str, Any]:
         return {"event_ids": ids, "pitch": "Perfect fit."}
 
     monkeypatch.setattr("app.services.stt.transcribe", fake_transcribe)
@@ -151,12 +161,12 @@ def test_match_voice_with_transcript(
 
 
 def test_match_voice_empty_transcript_is_random(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def silent(
         data: bytes, filename: str | None = None, content_type: str | None = None
-    ) -> Transcript:
-        return Transcript(text="", language=None, provider="whisper")
+    ) -> stt.Transcript:
+        return stt.Transcript(text="", language=None, provider="whisper")
 
     monkeypatch.setattr("app.services.stt.transcribe", silent)
     body = keyed_client.post(
@@ -167,11 +177,11 @@ def test_match_voice_empty_transcript_is_random(
 
 
 def test_match_voice_stt_raising_is_random(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def broken(
         data: bytes, filename: str | None = None, content_type: str | None = None
-    ) -> Transcript:
+    ) -> stt.Transcript:
         raise RuntimeError("no cuda")
 
     monkeypatch.setattr("app.services.stt.transcribe", broken)
@@ -182,7 +192,7 @@ def test_match_voice_stt_raising_is_random(
     assert response.json()["mode"] == "random"
 
 
-def test_match_voice_empty_upload_is_random(keyed_client: TestClient) -> None:
+def test_match_voice_empty_upload_is_random(keyed_client: testclient.TestClient) -> None:
     response = keyed_client.post(
         "/api/match/voice", files={"audio": ("clip.webm", b"", "audio/webm")}
     )
@@ -221,13 +231,16 @@ def test_call_llm_parses_tool_arguments(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_resolve_ids_tolerates_missing_prefix() -> None:
-    from datetime import timedelta
+    import datetime
 
-    from app.schemas.event import Event
-    from app.sources.base import now_jst
+    from app.schemas import event as event_schema
+    from app.sources import base
 
-    event = Event(
-        id="seed:abc123", title="X", starts_at=now_jst() + timedelta(days=1), source="seed"
+    event = event_schema.Event(
+        id="seed:abc123",
+        title="X",
+        starts_at=base.now_jst() + datetime.timedelta(days=1),
+        source="seed",
     )
     by_id = {event.id: event}
     assert matcher.resolve_ids(["abc123"], by_id) == [event]
@@ -237,12 +250,12 @@ def test_resolve_ids_tolerates_missing_prefix() -> None:
 
 
 def test_match_text_tolerates_too_many_and_too_few_ids(
-    keyed_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    keyed_client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An off-by-one id count is a formatting slip, not a reason to throw the answer away."""
     known = [event["id"] for event in keyed_client.get("/api/events").json()[:6]]
 
-    async def too_many(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def too_many(query: str, events: list[Any], settings: config.Settings) -> dict[str, Any]:
         return {"event_ids": known, "pitch": "Six good ones."}
 
     monkeypatch.setattr(matcher, "call_llm", too_many)
@@ -250,7 +263,7 @@ def test_match_text_tolerates_too_many_and_too_few_ids(
     assert body["mode"] == "match"
     assert len(body["events"]) == matcher.MAX_PICK
 
-    async def just_one(query: str, events: list[Any], settings: Settings) -> dict[str, Any]:
+    async def just_one(query: str, events: list[Any], settings: config.Settings) -> dict[str, Any]:
         return {"event_ids": known[:1], "pitch": "This one."}
 
     monkeypatch.setattr(matcher, "call_llm", just_one)

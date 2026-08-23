@@ -1,22 +1,19 @@
 """STT service + `/api/transcribe`. The default run never loads a model or touches the GPU."""
 
-from __future__ import annotations
-
 import os
+import pathlib
 import sys
-from collections.abc import Iterator
-from pathlib import Path
+from collections import abc
 from typing import Any
 
 import faster_whisper
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import testclient
 
-from app.core.config import Settings
+from app.core import config
 from app.services import stt
-from app.services.stt import AudioTooLongError, SpeechToText, SttError, Transcript, get_stt
 
-FIXTURE = Path(__file__).parent / "fixtures" / "sample.webm"
+FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "sample.webm"
 
 
 class FakeInfo:
@@ -47,14 +44,14 @@ class FakeModel:
 
 
 @pytest.fixture(autouse=True)
-def _reset_singleton() -> Iterator[None]:
+def _reset_singleton() -> abc.Iterator[None]:
     stt.reset_stt()
     yield
     stt.reset_stt()
 
 
-def _settings(**overrides: Any) -> Settings:
-    return Settings(**overrides)
+def _settings(**overrides: Any) -> config.Settings:
+    return config.Settings(**overrides)
 
 
 def _install(monkeypatch: pytest.MonkeyPatch, factory: Any) -> None:
@@ -75,11 +72,11 @@ async def test_transcribe_joins_segments_and_passes_language(
         return model
 
     _install(monkeypatch, factory)
-    service = SpeechToText(_settings(whisper_device="cpu", whisper_model="tiny"))
+    service = stt.SpeechToText(_settings(whisper_device="cpu", whisper_model="tiny"))
 
     result = await service.transcribe(b"fake-bytes", "clip.webm")
 
-    assert result == Transcript(
+    assert result == stt.Transcript(
         text="I want a Python meetup in Kyoto.", language="en", duration_s=3.2, provider="whisper"
     )
     assert service.ready is True
@@ -97,7 +94,7 @@ async def test_model_is_loaded_once(monkeypatch: pytest.MonkeyPatch) -> None:
         return FakeModel(name, device, compute_type)
 
     _install(monkeypatch, factory)
-    service = SpeechToText(_settings(whisper_device="cpu"))
+    service = stt.SpeechToText(_settings(whisper_device="cpu"))
 
     assert service.ready is False
     await service.warmup()
@@ -114,7 +111,7 @@ async def test_cuda_failure_falls_back_to_cpu_int8(monkeypatch: pytest.MonkeyPat
         return FakeModel(name, device, compute_type)
 
     _install(monkeypatch, factory)
-    service = SpeechToText(_settings(whisper_device="auto"))
+    service = stt.SpeechToText(_settings(whisper_device="auto"))
 
     await service.transcribe(b"bytes")
 
@@ -126,12 +123,12 @@ async def test_warmup_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
         raise RuntimeError("model file is missing")
 
     _install(monkeypatch, factory)
-    service = SpeechToText(_settings(whisper_device="cpu"))
+    service = stt.SpeechToText(_settings(whisper_device="cpu"))
 
     await service.warmup()
 
     assert service.ready is False
-    with pytest.raises(SttError):
+    with pytest.raises(stt.SttError):
         await service.transcribe(b"bytes")
 
 
@@ -142,15 +139,15 @@ async def test_clip_over_the_limit_is_rejected(monkeypatch: pytest.MonkeyPatch) 
         return model
 
     _install(monkeypatch, factory)
-    service = SpeechToText(_settings(whisper_device="cpu", stt_max_seconds=60))
+    service = stt.SpeechToText(_settings(whisper_device="cpu", stt_max_seconds=60))
 
-    with pytest.raises(AudioTooLongError):
+    with pytest.raises(stt.AudioTooLongError):
         await service.transcribe(b"bytes")
 
 
 async def test_empty_audio_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    service = SpeechToText(_settings(whisper_device="cpu"))
-    with pytest.raises(SttError):
+    service = stt.SpeechToText(_settings(whisper_device="cpu"))
+    with pytest.raises(stt.SttError):
         await service.transcribe(b"")
 
 
@@ -162,7 +159,7 @@ async def test_module_level_helpers_use_the_singleton(monkeypatch: pytest.Monkey
     result = await stt.transcribe(b"bytes", "clip.webm", "audio/webm")
 
     assert result.provider == "whisper"
-    assert get_stt().ready is True
+    assert stt.get_stt().ready is True
 
 
 # --- platform / backend selection --------------------------------------------------
@@ -244,11 +241,11 @@ async def test_apple_silicon_transcribes_through_mlx(
 ) -> None:
     monkeypatch.setattr(stt.sys, "platform", "darwin")
     monkeypatch.setattr(stt.platform, "machine", lambda: "arm64")
-    service = SpeechToText(_settings(whisper_model="large-v3-turbo"))
+    service = stt.SpeechToText(_settings(whisper_model="large-v3-turbo"))
 
     result = await service.transcribe(b"bytes", "clip.webm")
 
-    assert result == Transcript(
+    assert result == stt.Transcript(
         text="I want a Python meetup in Kyoto.", language="en", duration_s=3.2, provider="whisper"
     )
     assert (service.device, service.compute_type) == ("mlx", "float16")
@@ -261,7 +258,7 @@ async def test_mlx_failure_falls_back_to_cpu(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setitem(sys.modules, "mlx_whisper", None)  # import raises ImportError
     _install(monkeypatch, FakeModel)
 
-    service = SpeechToText(_settings())
+    service = stt.SpeechToText(_settings())
     result = await service.transcribe(b"bytes")
 
     assert result.provider == "whisper"
@@ -279,41 +276,43 @@ async def test_mlx_failure_falls_back_to_cpu(monkeypatch: pytest.MonkeyPatch) ->
     ],
 )
 def test_mlx_repo_mapping(model: str, repo: str) -> None:
-    assert SpeechToText(_settings(whisper_model=model))._mlx_repo() == repo
+    assert stt.SpeechToText(_settings(whisper_model=model))._mlx_repo() == repo
 
 
 def test_unknown_model_falls_back_to_the_default_repo() -> None:
-    service = SpeechToText(_settings(whisper_model="distil-large-v2"))
+    service = stt.SpeechToText(_settings(whisper_model="distil-large-v2"))
 
     assert service._mlx_repo() == stt.MLX_DEFAULT_REPO == "mlx-community/whisper-large-v3-turbo"
 
 
 def test_the_default_model_has_an_mlx_repo() -> None:
     """A default `uv sync --extra mlx` must not land on the fallback path."""
-    assert stt.MLX_REPOS[Settings().whisper_model] == stt.MLX_DEFAULT_REPO
+    assert stt.MLX_REPOS[config.Settings().whisper_model] == stt.MLX_DEFAULT_REPO
 
 
 # --- route ---------------------------------------------------------------------------
 
 
 class FakeService:
-    def __init__(self, result: Transcript | Exception) -> None:
+    def __init__(self, result: stt.Transcript | Exception) -> None:
         self.result = result
 
-    async def transcribe(self, audio: bytes, filename: str = "audio.webm") -> Transcript:
+    async def transcribe(self, audio: bytes, filename: str = "audio.webm") -> stt.Transcript:
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
 
 
-def _use(monkeypatch: pytest.MonkeyPatch, result: Transcript | Exception) -> None:
-    monkeypatch.setattr("app.api.routes.transcribe.get_stt", lambda: FakeService(result))
+def _use(monkeypatch: pytest.MonkeyPatch, result: stt.Transcript | Exception) -> None:
+    monkeypatch.setattr("app.services.stt.get_stt", lambda: FakeService(result))
 
 
-def test_route_returns_the_transcript(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_route_returns_the_transcript(
+    client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _use(
         monkeypatch,
-        Transcript(text="hello kansai", language="en", duration_s=1.5, provider="whisper"),
+        stt.Transcript(text="hello kansai", language="en", duration_s=1.5, provider="whisper"),
     )
 
     response = client.post("/api/transcribe", files={"audio": ("c.webm", b"x", "audio/webm")})
@@ -327,16 +326,20 @@ def test_route_returns_the_transcript(client: TestClient, monkeypatch: pytest.Mo
     }
 
 
-def test_route_rejects_empty_upload(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _use(monkeypatch, Transcript(text="unused"))
+def test_route_rejects_empty_upload(
+    client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, stt.Transcript(text="unused"))
 
     response = client.post("/api/transcribe", files={"audio": ("c.webm", b"", "audio/webm")})
 
     assert response.status_code == 400
 
 
-def test_route_rejects_oversize_upload(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _use(monkeypatch, Transcript(text="unused"))
+def test_route_rejects_oversize_upload(
+    client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, stt.Transcript(text="unused"))
     # Shrunk from the real 10 MB so the test does not push a huge multipart body.
     monkeypatch.setattr("app.api.routes.transcribe.MAX_AUDIO_BYTES", 8)
 
@@ -351,8 +354,10 @@ def test_the_advertised_upload_limit_is_10_mb() -> None:
     assert route.MAX_AUDIO_BYTES == 10 * 1024 * 1024
 
 
-def test_route_rejects_too_long_clip(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    _use(monkeypatch, AudioTooLongError("Clip is 120.0s, limit is 60s"))
+def test_route_rejects_too_long_clip(
+    client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use(monkeypatch, stt.AudioTooLongError("Clip is 120.0s, limit is 60s"))
 
     response = client.post("/api/transcribe", files={"audio": ("c.webm", b"x", "audio/webm")})
 
@@ -360,9 +365,9 @@ def test_route_rejects_too_long_clip(client: TestClient, monkeypatch: pytest.Mon
 
 
 def test_route_returns_503_when_the_model_is_down(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _use(monkeypatch, SttError("model failed to load"))
+    _use(monkeypatch, stt.SttError("model failed to load"))
 
     response = client.post("/api/transcribe", files={"audio": ("c.webm", b"x", "audio/webm")})
 
@@ -370,9 +375,11 @@ def test_route_returns_503_when_the_model_is_down(
     assert response.json() == {"detail": "Transcription unavailable"}
 
 
-def test_status_reports_readiness(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    service = SpeechToText(_settings(whisper_model="tiny"))
-    monkeypatch.setattr("app.api.routes.transcribe.get_stt", lambda: service)
+def test_status_reports_readiness(
+    client: testclient.TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = stt.SpeechToText(_settings(whisper_model="tiny"))
+    monkeypatch.setattr("app.services.stt.get_stt", lambda: service)
 
     response = client.get("/api/transcribe/status")
 
@@ -393,7 +400,7 @@ def test_status_reports_readiness(client: TestClient, monkeypatch: pytest.Monkey
     os.environ.get("RUN_STT_INTEGRATION") != "1", reason="set RUN_STT_INTEGRATION=1"
 )
 async def test_real_tiny_model_on_the_fixture() -> None:
-    service = SpeechToText(_settings(whisper_model="tiny", whisper_device="auto"))
+    service = stt.SpeechToText(_settings(whisper_model="tiny", whisper_device="auto"))
 
     result = await service.transcribe(FIXTURE.read_bytes(), "sample.webm")
 

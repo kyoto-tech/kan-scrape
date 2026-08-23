@@ -6,10 +6,10 @@ import threading
 import time
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import testclient
 
-from app.core.config import get_settings
-from app.main import create_app
+from app import main
+from app.core import config
 from app.services import stt
 
 
@@ -33,7 +33,7 @@ async def test_model_loads_on_a_daemon_thread(monkeypatch: pytest.MonkeyPatch) -
         seen["daemon"] = current.daemon
         return object()
 
-    service = stt.SpeechToText(get_settings())
+    service = stt.SpeechToText(config.get_settings())
     monkeypatch.setattr(service, "_load_model", fake_load)
 
     await service._ensure_model()
@@ -50,6 +50,6 @@ def test_lifespan_does_not_block_on_stt_warmup(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(stt, "warmup", slow_warmup)
 
     started = time.perf_counter()
-    with TestClient(create_app()) as client:
+    with testclient.TestClient(main.create_app()) as client:
         assert client.get("/api/health").status_code == 200
     assert time.perf_counter() - started < 5

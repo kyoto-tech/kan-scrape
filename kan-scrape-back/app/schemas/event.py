@@ -1,24 +1,16 @@
-from datetime import datetime
+import datetime
+import zoneinfo
 from typing import Annotated, Any, Literal
-from zoneinfo import ZoneInfo
 
-from pydantic import (
-    BaseModel,
-    Field,
-    HttpUrl,
-    ValidationError,
-    ValidatorFunctionWrapHandler,
-    WrapValidator,
-    field_validator,
-)
+import pydantic
 
-JST = ZoneInfo("Asia/Tokyo")
+JST = zoneinfo.ZoneInfo("Asia/Tokyo")
 
 City = Literal["Kyoto", "Osaka", "Kobe", "Nara", "Online", "Other"]
 Lang = Literal["ja", "en", "mixed"]
 
 
-def _tolerant_url(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+def _tolerant_url(value: Any, handler: pydantic.ValidatorFunctionWrapHandler) -> Any:
     """A malformed URL costs us the field, never the whole event.
 
     Upstream feeds happily ship `"image_url": "none"` or a bare path; without this the
@@ -26,33 +18,33 @@ def _tolerant_url(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
     """
     try:
         return handler(value)
-    except ValidationError:
+    except pydantic.ValidationError:
         return None
 
 
-MaybeUrl = Annotated[HttpUrl | None, WrapValidator(_tolerant_url)]
+MaybeUrl = Annotated[pydantic.HttpUrl | None, pydantic.WrapValidator(_tolerant_url)]
 
 
-class Event(BaseModel):
+class Event(pydantic.BaseModel):
     """A single upcoming event, normalised across every source adapter."""
 
     id: str
     title: str
-    starts_at: datetime
-    ends_at: datetime | None = None
+    starts_at: datetime.datetime
+    ends_at: datetime.datetime | None = None
     location: str | None = None
     url: MaybeUrl = None
     source: str
     description: str | None = None
     city: City | None = None
-    tags: list[str] = Field(default_factory=list)
+    tags: list[str] = pydantic.Field(default_factory=list)
     lang: Lang | None = None
     price: str | None = None
     image_url: MaybeUrl = None
 
-    @field_validator("starts_at", "ends_at")
+    @pydantic.field_validator("starts_at", "ends_at")
     @classmethod
-    def _assume_jst(cls, value: datetime | None) -> datetime | None:
+    def _assume_jst(cls, value: datetime.datetime | None) -> datetime.datetime | None:
         """Naive input means JST.
 
         Every downstream comparison (filtering, sorting, dedupe) mixes events from several
@@ -65,20 +57,20 @@ class Event(BaseModel):
         return value
 
 
-class MatchResponse(BaseModel):
+class MatchResponse(pydantic.BaseModel):
     """Result of a voice/text match request (or of the random fallback)."""
 
     transcript: str | None = None
     language: str | None = None
-    events: list[Event] = Field(default_factory=list)
+    events: list[Event] = pydantic.Field(default_factory=list)
     pitch: str
     mode: Literal["match", "random"]
 
 
-class TextMatchRequest(BaseModel):
+class TextMatchRequest(pydantic.BaseModel):
     query: str
 
 
-class RefreshResponse(BaseModel):
+class RefreshResponse(pydantic.BaseModel):
     count: int
     per_source: dict[str, int]

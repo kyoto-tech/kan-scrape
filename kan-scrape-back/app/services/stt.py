@@ -11,31 +11,29 @@ The module-level `transcribe()` / `warmup()` helpers are the contract the match 
 against; they delegate to the process-wide `SpeechToText` singleton.
 """
 
-from __future__ import annotations
-
 import asyncio
+import contextlib
 import ctypes
 import logging
+import pathlib
 import platform
 import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Callable
-from contextlib import suppress
-from pathlib import Path
+from collections import abc
 from typing import Literal
 
-from pydantic import BaseModel
+import pydantic
 
-from app.core.config import Settings, get_settings
+from app.core import config
 
 logger = logging.getLogger(__name__)
 
 _WEBM_SUFFIXES = {".webm", ".ogg", ".oga", ".opus", ".mp3", ".m4a", ".mp4", ".wav", ".flac"}
 
 
-class Transcript(BaseModel):
+class Transcript(pydantic.BaseModel):
     text: str
     language: str | None = None
     duration_s: float = 0.0
@@ -54,7 +52,7 @@ class AudioTooLongError(SttError):
 _GPU_DEVICES = frozenset({"cuda", "mlx"})
 
 
-async def _in_daemon_thread(func: Callable[[], object]) -> object:
+async def _in_daemon_thread(func: abc.Callable[[], object]) -> object:
     """Like `asyncio.to_thread`, but on a daemon thread.
 
     The model load takes 30-120s on a cold cache, and the default executor's threads are
@@ -64,7 +62,7 @@ async def _in_daemon_thread(func: Callable[[], object]) -> object:
     loop = asyncio.get_running_loop()
     future: asyncio.Future[object] = loop.create_future()
 
-    def _settle(setter: Callable[[object], None], value: object) -> None:
+    def _settle(setter: abc.Callable[[object], None], value: object) -> None:
         if not future.done():
             setter(value)
 
@@ -72,10 +70,10 @@ async def _in_daemon_thread(func: Callable[[], object]) -> object:
         try:
             result = func()
         except BaseException as exc:  # noqa: BLE001 - forwarded to the awaiting coroutine
-            with suppress(RuntimeError):  # loop already closed: nobody is waiting
+            with contextlib.suppress(RuntimeError):  # loop already closed: nobody is waiting
                 loop.call_soon_threadsafe(_settle, future.set_exception, exc)
         else:
-            with suppress(RuntimeError):
+            with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(_settle, future.set_result, result)
 
     threading.Thread(target=_runner, name="whisper-load", daemon=True).start()
@@ -86,7 +84,7 @@ def _is_apple_silicon() -> bool:
     return sys.platform == "darwin" and platform.machine() in {"arm64", "aarch64"}
 
 
-def _resolve_device(settings: Settings) -> list[tuple[str, str]]:
+def _resolve_device(settings: config.Settings) -> list[tuple[str, str]]:
     """Ordered (device, compute_type) candidates to try when loading the model.
 
     `auto` picks per platform: CUDA on Linux/Windows, MLX (Metal) on Apple Silicon, CPU on an
@@ -179,8 +177,8 @@ class _MlxModel:
 class SpeechToText:
     """One Whisper model, loaded once, with calls serialized behind a lock."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
-        self._settings = settings or get_settings()
+    def __init__(self, settings: config.Settings | None = None) -> None:
+        self._settings = settings or config.get_settings()
         self._model: object | None = None
         self._device: str | None = None
         self._compute_type: str | None = None
@@ -249,9 +247,9 @@ class SpeechToText:
         if device == "mlx":
             return _MlxModel(self._mlx_repo())
 
-        from faster_whisper import WhisperModel  # noqa: PLC0415 - keeps import cost off startup
+        import faster_whisper  # noqa: PLC0415 - keeps import cost off startup
 
-        return self._build(WhisperModel, name, device, compute_type)
+        return self._build(faster_whisper.WhisperModel, name, device, compute_type)
 
     def _mlx_repo(self) -> str:
         """Map the configured model name onto an mlx-community HF repo."""
@@ -316,12 +314,12 @@ class SpeechToText:
                 return transcript
             raise SttError(str(exc)) from exc
 
-        suffix = Path(filename or "").suffix.lower()
+        suffix = pathlib.Path(filename or "").suffix.lower()
         if suffix not in _WEBM_SUFFIXES:
             suffix = ".webm"
 
         with tempfile.TemporaryDirectory(prefix="kan-stt-") as tmpdir:
-            path = Path(tmpdir) / f"clip{suffix}"
+            path = pathlib.Path(tmpdir) / f"clip{suffix}"
             path.write_bytes(audio)
             async with self._infer_lock:
                 try:
@@ -360,7 +358,7 @@ class SpeechToText:
                 return None
         return self._model
 
-    def _run(self, model: object, path: Path) -> Transcript:
+    def _run(self, model: object, path: pathlib.Path) -> Transcript:
         try:
             segments, info = model.transcribe(  # type: ignore[attr-defined]
                 str(path), beam_size=1, vad_filter=True, language=None
@@ -432,7 +430,7 @@ def _preload_cuda_libs() -> None:
         return
 
     for root in nvidia.__path__:
-        for lib in sorted(Path(root).glob("*/lib/lib*.so*")):
+        for lib in sorted(pathlib.Path(root).glob("*/lib/lib*.so*")):
             if not any(key in lib.name for key in ("cublas", "cudnn")):
                 continue
             try:
@@ -441,7 +439,7 @@ def _preload_cuda_libs() -> None:
                 continue
 
 
-def _to_wav(path: Path) -> Path:
+def _to_wav(path: pathlib.Path) -> pathlib.Path:
     """Transcode to 16 kHz mono wav with ffmpeg when PyAV cannot read the container."""
     wav = path.with_suffix(".wav")
     result = subprocess.run(  # noqa: S603 - fixed argv, path is our own temp file
@@ -476,7 +474,7 @@ def get_stt() -> SpeechToText:
     """Process-wide singleton, FastAPI-dependency friendly."""
     global _singleton
     if _singleton is None:
-        _singleton = SpeechToText(get_settings())
+        _singleton = SpeechToText(config.get_settings())
     return _singleton
 
 

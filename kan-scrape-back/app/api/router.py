@@ -1,8 +1,8 @@
-from fastapi import APIRouter
+import fastapi
 
 from app.api.routes import events, health, match, speech, transcribe
 
-api_router = APIRouter()
+api_router = fastapi.APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(events.router)
 api_router.include_router(match.router)

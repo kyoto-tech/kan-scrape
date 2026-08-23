@@ -1,22 +1,14 @@
 """Meetup.com public iCal feeds — no API key required."""
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from typing import Any
 
 import httpx
-from icalendar import Calendar
+import icalendar
 
-from app.schemas.event import Event
-from app.sources.base import (
-    clean_text,
-    ensure_aware,
-    guess_city,
-    guess_lang,
-    make_id,
-)
+from app.schemas import event as event_schema
+from app.sources import base
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +23,10 @@ def _component_str(component: Any, key: str) -> str | None:
     return str(value)
 
 
-def parse_ical(payload: str | bytes, slug: str = "meetup") -> list[Event]:
+def parse_ical(payload: str | bytes, slug: str = "meetup") -> list[event_schema.Event]:
     """Parse an iCal feed into events. Never raises — bad feeds yield []."""
     try:
-        calendar = Calendar.from_ical(payload)
+        calendar = icalendar.Calendar.from_ical(payload)
     except Exception:  # noqa: BLE001 - third-party parser, any failure is "no events"
         logger.warning("Unparseable iCal feed for %s", slug)
         return []
@@ -44,21 +36,21 @@ def parse_ical(payload: str | bytes, slug: str = "meetup") -> list[Event]:
     group_name = _component_str(calendar, "X-WR-CALNAME") or _component_str(calendar, "NAME")
     slug_hint = slug.replace("-", " ").replace("_", " ")
 
-    events: list[Event] = []
+    events: list[event_schema.Event] = []
     for component in calendar.walk("VEVENT"):
         try:
             title = _component_str(component, "SUMMARY")
-            starts_at = ensure_aware(getattr(component.get("DTSTART"), "dt", None))
+            starts_at = base.ensure_aware(getattr(component.get("DTSTART"), "dt", None))
             if not title or starts_at is None:
                 continue
-            ends_at = ensure_aware(getattr(component.get("DTEND"), "dt", None))
-            location = clean_text(_component_str(component, "LOCATION"), limit=200)
-            description = clean_text(_component_str(component, "DESCRIPTION"))
+            ends_at = base.ensure_aware(getattr(component.get("DTEND"), "dt", None))
+            location = base.clean_text(_component_str(component, "LOCATION"), limit=200)
+            description = base.clean_text(_component_str(component, "DESCRIPTION"))
             url = _component_str(component, "URL")
             uid = _component_str(component, "UID") or f"{title}|{starts_at.isoformat()}"
             events.append(
-                Event(
-                    id=make_id("meetup", uid),
+                event_schema.Event(
+                    id=base.make_id("meetup", uid),
                     title=title,
                     starts_at=starts_at,
                     ends_at=ends_at,
@@ -67,12 +59,12 @@ def parse_ical(payload: str | bytes, slug: str = "meetup") -> list[Event]:
                     source="meetup",
                     description=description,
                     city=(
-                        guess_city(location, title, description)
-                        or guess_city(group_name, slug_hint)
+                        base.guess_city(location, title, description)
+                        or base.guess_city(group_name, slug_hint)
                         or "Other"
                     ),
                     tags=["meetup", slug],
-                    lang=guess_lang(title, description),
+                    lang=base.guess_lang(title, description),
                 )
             )
         except Exception:  # noqa: BLE001 - skip the bad row, keep the feed
@@ -89,7 +81,7 @@ class MeetupICalSource:
         self.slugs = slugs
         self.timeout_s = timeout_s
 
-    async def _fetch_one(self, client: httpx.AsyncClient, slug: str) -> list[Event]:
+    async def _fetch_one(self, client: httpx.AsyncClient, slug: str) -> list[event_schema.Event]:
         try:
             response = await client.get(ICAL_URL.format(slug=slug))
             if response.status_code != 200:
@@ -100,7 +92,7 @@ class MeetupICalSource:
             logger.warning("Meetup feed %s failed", slug, exc_info=True)
             return []
 
-    async def fetch(self) -> list[Event]:
+    async def fetch(self) -> list[event_schema.Event]:
         if not self.slugs:
             return []
         headers = {"User-Agent": USER_AGENT, "Accept": "text/calendar,*/*"}
@@ -116,7 +108,7 @@ class MeetupICalSource:
             logger.exception("Meetup source failed")
             return []
 
-        events: list[Event] = []
+        events: list[event_schema.Event] = []
         for result in results:
             if isinstance(result, BaseException):
                 logger.warning("Meetup group fetch failed: %s", result)

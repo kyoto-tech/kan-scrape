@@ -1,8 +1,8 @@
 import os
-from collections.abc import Iterator
+from collections import abc
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import testclient
 
 # Tests must never touch the network: only the offline seed source is enabled,
 # and the lifespan must not pull the Whisper model in (see docs/handoff-stt.md).
@@ -16,16 +16,16 @@ os.environ["DOORKEEPER_TOKEN"] = ""
 os.environ["CONNPASS_API_KEY"] = ""
 os.environ["STT_FALLBACK"] = ""
 
-from app.core.config import get_settings  # noqa: E402
-from app.main import create_app  # noqa: E402
-from app.services.events import EventStore  # noqa: E402
+from app import main  # noqa: E402
+from app.core import config  # noqa: E402
+from app.services import events as event_service  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _fresh_settings() -> Iterator[None]:
-    get_settings.cache_clear()
+def _fresh_settings() -> abc.Iterator[None]:
+    config.get_settings.cache_clear()
     yield
-    get_settings.cache_clear()
+    config.get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -43,11 +43,11 @@ def _no_live_llm(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    with TestClient(create_app()) as test_client:
+def client() -> abc.Iterator[testclient.TestClient]:
+    with testclient.TestClient(main.create_app()) as test_client:
         yield test_client
 
 
 @pytest.fixture
-def store(client: TestClient) -> EventStore:
+def store(client: testclient.TestClient) -> event_service.EventStore:
     return client.app.state.event_store

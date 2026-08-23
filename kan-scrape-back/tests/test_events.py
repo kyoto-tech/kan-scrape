@@ -1,13 +1,15 @@
-from datetime import datetime, timedelta
+import datetime
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import testclient
 
-from app.services.events import EventStore
-from app.sources.base import now_jst
+from app.schemas import event as event_schema
+from app.services import events as event_service
+from app.services import matcher
+from app.sources import base
 
 
-def test_list_events_returns_seed_events(client: TestClient) -> None:
+def test_list_events_returns_seed_events(client: testclient.TestClient) -> None:
     response = client.get("/api/events")
     assert response.status_code == 200
     events = response.json()
@@ -16,21 +18,21 @@ def test_list_events_returns_seed_events(client: TestClient) -> None:
     assert all(event["source"] == "seed" for event in events)
 
 
-def test_list_events_are_future_only_and_sorted(client: TestClient) -> None:
+def test_list_events_are_future_only_and_sorted(client: testclient.TestClient) -> None:
     events = client.get("/api/events").json()
     starts = [event["starts_at"] for event in events]
     assert starts == sorted(starts)
-    now = now_jst() - timedelta(minutes=1)
-    assert all(datetime.fromisoformat(s) >= now for s in starts)
+    now = base.now_jst() - datetime.timedelta(minutes=1)
+    assert all(datetime.datetime.fromisoformat(s) >= now for s in starts)
 
 
-def test_list_events_filters_and_limits(client: TestClient) -> None:
+def test_list_events_filters_and_limits(client: testclient.TestClient) -> None:
     kyoto = client.get("/api/events", params={"city": "kyoto", "limit": 3}).json()
     assert 0 < len(kyoto) <= 3
     assert all(event["city"] == "Kyoto" for event in kyoto)
 
 
-def test_list_events_tolerates_empty_and_odd_limits(client: TestClient) -> None:
+def test_list_events_tolerates_empty_and_odd_limits(client: testclient.TestClient) -> None:
     """URLSearchParams from the frontend emits `?city=&limit=` — that must not 422."""
     default_count = len(client.get("/api/events").json())
 
@@ -52,7 +54,7 @@ def test_list_events_tolerates_empty_and_odd_limits(client: TestClient) -> None:
     assert len(clamped.json()) <= 500
 
 
-def test_random_event(client: TestClient) -> None:
+def test_random_event(client: testclient.TestClient) -> None:
     response = client.get("/api/events/random")
     assert response.status_code == 200
     body = response.json()
@@ -62,27 +64,24 @@ def test_random_event(client: TestClient) -> None:
 
 
 def test_random_match_samples_several_distinct_events() -> None:
-    from app.schemas.event import Event
-    from app.services.matcher import MAX_PICK, random_match
-
-    now = now_jst()
+    now = base.now_jst()
     pool = [
-        Event(
+        event_schema.Event(
             id=f"seed:{index}",
             title=f"Event {index}",
-            starts_at=now + timedelta(days=index + 1),
+            starts_at=now + datetime.timedelta(days=index + 1),
             source="seed",
         )
         for index in range(10)
     ]
-    result = random_match(pool, apologetic=False)
+    result = matcher.random_match(pool, apologetic=False)
     ids = [event.id for event in result.events]
-    assert 2 <= len(ids) <= MAX_PICK
+    assert 2 <= len(ids) <= matcher.MAX_PICK
     assert len(ids) == len(set(ids))
     assert set(ids) <= {event.id for event in pool}
 
 
-def test_refresh_without_remote_sources(client: TestClient) -> None:
+def test_refresh_without_remote_sources(client: testclient.TestClient) -> None:
     response = client.post("/api/events/refresh")
     assert response.status_code == 200
     body = response.json()
@@ -91,15 +90,22 @@ def test_refresh_without_remote_sources(client: TestClient) -> None:
 
 
 def test_store_dedupes_and_drops_past_events() -> None:
-    from app.schemas.event import Event
-
-    now = now_jst()
-    store = EventStore(remote_sources=[])
+    now = base.now_jst()
+    store = event_service.EventStore(remote_sources=[])
     store.set_seed_events(
         [
-            Event(id="a:1", title="Same Title", starts_at=now + timedelta(days=1), source="a"),
-            Event(id="b:1", title="same   title", starts_at=now + timedelta(days=1), source="b"),
-            Event(id="c:1", title="Old", starts_at=now - timedelta(days=1), source="c"),
+            event_schema.Event(
+                id="a:1", title="Same Title", starts_at=now + datetime.timedelta(days=1), source="a"
+            ),
+            event_schema.Event(
+                id="b:1",
+                title="same   title",
+                starts_at=now + datetime.timedelta(days=1),
+                source="b",
+            ),
+            event_schema.Event(
+                id="c:1", title="Old", starts_at=now - datetime.timedelta(days=1), source="c"
+            ),
         ]
     )
     events = store.all()
@@ -107,9 +113,7 @@ def test_store_dedupes_and_drops_past_events() -> None:
 
 
 def test_no_events_random_is_graceful() -> None:
-    from app.services.matcher import random_match
-
-    response = random_match([])
+    response = matcher.random_match([])
     assert response.mode == "random"
     assert response.events == []
     assert response.pitch
@@ -117,14 +121,22 @@ def test_no_events_random_is_graceful() -> None:
 
 def test_upcoming_copy_survives_a_past_duplicate() -> None:
     """Dedupe must not let this morning's copy of an event hide tonight's."""
-    from app.schemas.event import Event
-
-    now = now_jst()
-    store = EventStore(remote_sources=[])
+    now = base.now_jst()
+    store = event_service.EventStore(remote_sources=[])
     store.set_seed_events(
         [
-            Event(id="a:past", title="Same Title", starts_at=now - timedelta(hours=3), source="a"),
-            Event(id="a:next", title="Same Title", starts_at=now + timedelta(hours=3), source="a"),
+            event_schema.Event(
+                id="a:past",
+                title="Same Title",
+                starts_at=now - datetime.timedelta(hours=3),
+                source="a",
+            ),
+            event_schema.Event(
+                id="a:next",
+                title="Same Title",
+                starts_at=now + datetime.timedelta(hours=3),
+                source="a",
+            ),
         ]
     )
     assert [event.id for event in store.all()] == ["a:next"]
@@ -132,14 +144,17 @@ def test_upcoming_copy_survives_a_past_duplicate() -> None:
 
 def test_naive_datetimes_do_not_break_listing() -> None:
     """A source handing us a naive datetime used to make every read raise TypeError."""
-    from app.schemas.event import Event
-
-    naive = (now_jst() + timedelta(days=2)).replace(tzinfo=None)
-    store = EventStore(remote_sources=[])
+    naive = (base.now_jst() + datetime.timedelta(days=2)).replace(tzinfo=None)
+    store = event_service.EventStore(remote_sources=[])
     store.set_seed_events(
         [
-            Event(id="a:naive", title="Naive", starts_at=naive, source="a"),
-            Event(id="a:aware", title="Aware", starts_at=now_jst() + timedelta(days=1), source="a"),
+            event_schema.Event(id="a:naive", title="Naive", starts_at=naive, source="a"),
+            event_schema.Event(
+                id="a:aware",
+                title="Aware",
+                starts_at=base.now_jst() + datetime.timedelta(days=1),
+                source="a",
+            ),
         ]
     )
     assert [event.id for event in store.all()] == ["a:aware", "a:naive"]
@@ -147,12 +162,12 @@ def test_naive_datetimes_do_not_break_listing() -> None:
 
 def test_store_all_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     """Whatever goes wrong in the cache, the API serves an empty list rather than a 500."""
-    store = EventStore(remote_sources=[])
+    store = event_service.EventStore(remote_sources=[])
     store.load_seed()
 
     def boom(*args: object, **kwargs: object) -> list[object]:
         raise RuntimeError("poisoned cache")
 
-    monkeypatch.setattr("app.services.events.upcoming", boom)
+    monkeypatch.setattr("app.sources.base.upcoming", boom)
     assert store.all() == []
     assert store.count() == 0

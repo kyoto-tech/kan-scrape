@@ -1,20 +1,18 @@
 """Event listing, refresh and random-pick routes."""
 
-from __future__ import annotations
-
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Query
-from pydantic import BeforeValidator
+import fastapi
+import pydantic
 
-from app.api.deps import StoreDep
-from app.schemas.event import Event, MatchResponse, RefreshResponse
-from app.services.matcher import random_match
+from app.api import deps
+from app.schemas import event as event_schema
+from app.services import matcher
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/events", tags=["events"])
+router = fastapi.APIRouter(prefix="/events", tags=["events"])
 
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
@@ -41,33 +39,35 @@ def _lenient_limit(value: object) -> int | None:
 
 LenientLimit = Annotated[
     int | None,
-    BeforeValidator(_lenient_limit),
-    Query(description=f"0..{MAX_LIMIT}; empty or unparseable means {DEFAULT_LIMIT}"),
+    pydantic.BeforeValidator(_lenient_limit),
+    fastapi.Query(description=f"0..{MAX_LIMIT}; empty or unparseable means {DEFAULT_LIMIT}"),
 ]
 
 
-@router.get("", response_model=list[Event])
+@router.get("", response_model=list[event_schema.Event])
 def list_events(
-    store: StoreDep,
-    city: Annotated[str | None, Query(description="Kyoto | Osaka | Kobe | Nara | Online")] = None,
+    store: deps.StoreDep,
+    city: Annotated[
+        str | None, fastapi.Query(description="Kyoto | Osaka | Kobe | Nara | Online")
+    ] = None,
     limit: LenientLimit = None,
-) -> list[Event]:
+) -> list[event_schema.Event]:
     """Cached upcoming events, deduped and sorted by start time."""
     return store.all(city=city, limit=DEFAULT_LIMIT if limit is None else limit)
 
 
-@router.post("/refresh", response_model=RefreshResponse)
-async def refresh_events(store: StoreDep) -> RefreshResponse:
+@router.post("/refresh", response_model=event_schema.RefreshResponse)
+async def refresh_events(store: deps.StoreDep) -> event_schema.RefreshResponse:
     """Re-run every adapter. Adapters fail soft, so this never errors."""
     try:
         per_source = await store.refresh()
     except Exception:  # noqa: BLE001 - the endpoint must never 500
         logger.exception("Refresh failed")
         per_source = store.per_source
-    return RefreshResponse(count=store.count(), per_source=per_source)
+    return event_schema.RefreshResponse(count=store.count(), per_source=per_source)
 
 
-@router.get("/random", response_model=MatchResponse)
-def random_event(store: StoreDep) -> MatchResponse:
+@router.get("/random", response_model=event_schema.MatchResponse)
+def random_event(store: deps.StoreDep) -> event_schema.MatchResponse:
     """A random sample of upcoming events with a template pitch (no LLM involved)."""
-    return random_match(store.all(), apologetic=False)
+    return matcher.random_match(store.all(), apologetic=False)

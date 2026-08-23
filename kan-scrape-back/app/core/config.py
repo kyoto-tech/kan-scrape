@@ -1,8 +1,8 @@
-from functools import lru_cache
+import functools
 from typing import Annotated
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+import pydantic
+import pydantic_settings
 
 # Live-verified public iCal feeds (HTTP 200 + VCALENDAR), busiest first.
 DEFAULT_MEETUP_GROUPS = [
@@ -19,14 +19,16 @@ DEFAULT_MEETUP_GROUPS = [
 ]
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+class Settings(pydantic_settings.BaseSettings):
+    model_config = pydantic_settings.SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     app_name: str = "Kan Scrape API"
     version: str = "0.1.0"
     debug: bool = False
     api_prefix: str = "/api"
-    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    cors_origins: Annotated[list[str], pydantic_settings.NoDecode] = ["http://localhost:5173"]
 
     # --- LLM (matching + pitch) ---
     mistral_api_key: str | None = None
@@ -47,12 +49,12 @@ class Settings(BaseSettings):
     # --- Event sources ---
     doorkeeper_token: str | None = None
     connpass_api_key: str | None = None
-    meetup_groups: Annotated[list[str], NoDecode] = DEFAULT_MEETUP_GROUPS
+    meetup_groups: Annotated[list[str], pydantic_settings.NoDecode] = DEFAULT_MEETUP_GROUPS
     http_timeout_s: float = 10.0
     fetch_remote_sources: bool = True
     max_events_for_llm: int = 40
 
-    @field_validator("cors_origins", "meetup_groups", mode="before")
+    @pydantic.field_validator("cors_origins", "meetup_groups", mode="before")
     @classmethod
     def split_csv(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
@@ -60,6 +62,6 @@ class Settings(BaseSettings):
         return value
 
 
-@lru_cache
+@functools.lru_cache
 def get_settings() -> Settings:
     return Settings()

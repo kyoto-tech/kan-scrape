@@ -1,20 +1,16 @@
 """Match a spoken/typed wish against cached events with Mistral function calling."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging
 import random
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, BeforeValidator, Field, ValidationError
+import pydantic
 
-from app.schemas.event import Event, MatchResponse
-from app.sources.base import JST
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from app.core.config import Settings
+from app.core import config
+from app.schemas import event as event_schema
+from app.sources import base
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +89,7 @@ def _trim_ids(value: object) -> object:
     return value
 
 
-class PickEvents(BaseModel):
+class PickEvents(pydantic.BaseModel):
     """Validated arguments of the `pick_events` tool call.
 
     The tool schema asks the model for `MIN_PICK`-`MAX_PICK` ids; validation here is
@@ -102,35 +98,37 @@ class PickEvents(BaseModel):
     would be a worse answer than the one it actually gave us.
     """
 
-    event_ids: Annotated[list[str], BeforeValidator(_trim_ids)] = Field(min_length=1)
+    event_ids: Annotated[list[str], pydantic.BeforeValidator(_trim_ids)] = pydantic.Field(
+        min_length=1
+    )
     # A blank pitch would reach the frontend as `mode="match"` with nothing to speak, and
     # `/speech?text=` then 422s — silence in the demo. Reject it so we retry, then fall back.
-    pitch: Annotated[str, BeforeValidator(_strip)] = Field(min_length=1)
+    pitch: Annotated[str, pydantic.BeforeValidator(_strip)] = pydantic.Field(min_length=1)
 
 
-def format_when(event: Event) -> str:
-    return event.starts_at.astimezone(JST).strftime("%a %d %b %H:%M")
+def format_when(item: event_schema.Event) -> str:
+    return item.starts_at.astimezone(base.JST).strftime("%a %d %b %H:%M")
 
 
-def compact_event(event: Event) -> str:
+def compact_event(item: event_schema.Event) -> str:
     """One line per event: id | title | city | date | tags | 1-line description."""
-    description = (event.description or "").replace("\n", " ").strip()
+    description = (item.description or "").replace("\n", " ").strip()
     if len(description) > 140:
         description = description[:137].rstrip() + "..."
-    tags = ",".join(event.tags[:4])
+    tags = ",".join(item.tags[:4])
     return " | ".join(
         [
-            event.id,
-            event.title.replace("\n", " ").strip(),
-            event.city or "Other",
-            format_when(event),
+            item.id,
+            item.title.replace("\n", " ").strip(),
+            item.city or "Other",
+            format_when(item),
             tags,
             description,
         ]
     )
 
 
-def build_user_prompt(query: str, events: list[Event]) -> str:
+def build_user_prompt(query: str, events: list[event_schema.Event]) -> str:
     lines = "\n".join(compact_event(event) for event in events)
     return (
         f"User request: {query.strip()}\n\n"
@@ -140,11 +138,11 @@ def build_user_prompt(query: str, events: list[Event]) -> str:
     )
 
 
-def get_mistral_client(settings: Settings) -> Any:
+def get_mistral_client(settings: config.Settings) -> Any:
     """Isolated so tests can monkeypatch the SDK away."""
-    from mistralai.client import Mistral
+    from mistralai import client as mistral_client
 
-    return Mistral(api_key=settings.mistral_api_key)
+    return mistral_client.Mistral(api_key=settings.mistral_api_key)
 
 
 def _tool_arguments(response: Any) -> dict[str, Any]:
@@ -160,7 +158,9 @@ def _tool_arguments(response: Any) -> dict[str, Any]:
     raise ValueError(f"Unexpected tool arguments type: {type(raw).__name__}")
 
 
-async def call_llm(query: str, events: list[Event], settings: Settings) -> dict[str, Any]:
+async def call_llm(
+    query: str, events: list[event_schema.Event], settings: config.Settings
+) -> dict[str, Any]:
     """Single Mistral round-trip returning the raw `pick_events` arguments.
 
     Kept as a module-level function so tests can monkeypatch it wholesale.
@@ -182,13 +182,15 @@ async def call_llm(query: str, events: list[Event], settings: Settings) -> dict[
     return _tool_arguments(response)
 
 
-def resolve_ids(event_ids: list[str], by_id: dict[str, Event]) -> list[Event]:
+def resolve_ids(
+    event_ids: list[str], by_id: dict[str, event_schema.Event]
+) -> list[event_schema.Event]:
     """Map model-returned ids onto real events, tolerating a dropped `source:` prefix."""
-    by_suffix: dict[str, Event] = {}
+    by_suffix: dict[str, event_schema.Event] = {}
     for eid, event in by_id.items():
         by_suffix.setdefault(eid.split(":", 1)[-1], event)
 
-    chosen: list[Event] = []
+    chosen: list[event_schema.Event] = []
     for raw in event_ids:
         candidate = raw.strip().strip("`'\"")
         event = by_id.get(candidate) or by_suffix.get(candidate.split(":", 1)[-1])
@@ -200,14 +202,12 @@ def resolve_ids(event_ids: list[str], by_id: dict[str, Event]) -> list[Event]:
     return chosen
 
 
-def is_kyoto_tech_meetup(event: Event) -> bool:
+def is_kyoto_tech_meetup(event: event_schema.Event) -> bool:
     """Identify the community's own Meetup group for guaranteed top placement."""
-    return bool(
-        event.url and "meetup.com/kyoto-tech-meetup/events/" in str(event.url).casefold()
-    )
+    return bool(event.url and "meetup.com/kyoto-tech-meetup/events/" in str(event.url).casefold())
 
 
-def prioritize_community_event(events: list[Event]) -> list[Event]:
+def prioritize_community_event(events: list[event_schema.Event]) -> list[event_schema.Event]:
     """Keep Kyoto Tech Meetup first, even when the response reaches the five-event cap."""
     unique = list({event.id: event for event in events}.values())
     featured = [event for event in unique if is_kyoto_tech_meetup(event)]
@@ -216,15 +216,15 @@ def prioritize_community_event(events: list[Event]) -> list[Event]:
 
 
 def random_match(
-    events: list[Event],
+    events: list[event_schema.Event],
     *,
     transcript: str | None = None,
     language: str | None = None,
     apologetic: bool = True,
-) -> MatchResponse:
+) -> event_schema.MatchResponse:
     """Fallback answer: a random sample of upcoming events and a template pitch."""
     if not events:
-        return MatchResponse(
+        return event_schema.MatchResponse(
             transcript=transcript,
             language=language,
             events=[],
@@ -239,7 +239,7 @@ def random_match(
     where = event.city or event.location or "Kansai"
     tail = f"{event.title} on {format_when(event)} in {where}."
     opener = random.choice(_RANDOM_OPENERS) if apologetic else "Here's an idea:"
-    return MatchResponse(
+    return event_schema.MatchResponse(
         transcript=transcript,
         language=language,
         events=chosen,
@@ -256,16 +256,16 @@ def is_out_of_scope(query: str) -> bool:
 
 async def match(
     query: str,
-    events: list[Event],
-    settings: Settings,
+    events: list[event_schema.Event],
+    settings: config.Settings,
     *,
     transcript: str | None = None,
     language: str | None = None,
-) -> MatchResponse:
+) -> event_schema.MatchResponse:
     """Never raises. Returns `mode="match"` on success, `mode="random"` on any failure."""
     transcript = transcript if transcript is not None else query
     if is_out_of_scope(query):
-        return MatchResponse(
+        return event_schema.MatchResponse(
             transcript=transcript,
             language=language,
             events=[],
@@ -295,14 +295,14 @@ async def match(
             if not chosen:
                 raise ValueError("LLM returned no known event ids")
             featured_candidates = [event for event in candidates if is_kyoto_tech_meetup(event)]
-            return MatchResponse(
+            return event_schema.MatchResponse(
                 transcript=transcript,
                 language=language,
                 events=prioritize_community_event(featured_candidates[:1] + chosen),
                 pitch=picked.pitch,
                 mode="match",
             )
-        except (ValidationError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        except (pydantic.ValidationError, ValueError, KeyError, json.JSONDecodeError) as exc:
             logger.warning("Match attempt %d rejected: %s", attempt, exc)
         except asyncio.CancelledError:
             raise
