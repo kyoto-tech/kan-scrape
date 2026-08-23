@@ -9,6 +9,7 @@
   --accent: #b83230;
   --accent-bg: #fff7ed;
   --accent-border: #8f2624;
+  --pitch-text: var(--accent);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -39,6 +40,7 @@
   --border: #334155;
   --border-strong: #475569;
   --accent-bg: #451a16;
+  --pitch-text: #ffffff;
   color-scheme: dark;
 }
 
@@ -111,6 +113,11 @@ code {
   margin: 0 auto;
   padding: 1.5rem 0;
   box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1rem;
+  text-align: center;
 }
 
 .theme-toggle {
@@ -174,14 +181,6 @@ code {
   color: var(--text);
   font-size: 0.95rem;
   line-height: 1.5;
-}
-
-.app-shell {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 1rem;
-  text-align: center;
 }
 
 .talk-button {
@@ -380,7 +379,7 @@ code {
   margin: 0 0 1rem;
   padding: 0.875rem 1rem;
   border-radius: 0.75rem;
-  color: var(--accent);
+  color: var(--pitch-text);
   background: var(--accent-bg);
   font-size: 0.9rem;
   line-height: 1.5;
@@ -433,6 +432,7 @@ code {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
+  line-clamp: 5;
   -webkit-line-clamp: 5;
 }
 

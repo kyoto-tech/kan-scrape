@@ -32,15 +32,15 @@ kan-scrape/
 
 ## Setup, step by step
 
-### 1. Install the requirements
+### 1. Install requirements
 
-Install Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js, pnpm and ffmpeg. On macOS:
+Install Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js, pnpm and ffmpeg. On macOS, run:
 
 ```bash
 brew install ffmpeg
 ```
 
-### 2. Configure the backend
+### 2. Configure and install the backend
 
 Create the environment file:
 
@@ -79,9 +79,7 @@ If VS Code reports that environment-file injection is disabled, reload the windo
 enabling `python.terminal.useEnvFile`. The repository includes workspace settings pointing
 Python at `kan-scrape-back/.env`; FastAPI also reads that file directly.
 
-### 3. Install backend dependencies
-
-From `kan-scrape-back/`:
+From `kan-scrape-back/`, install the dependencies:
 
 ```bash
 uv sync
@@ -91,18 +89,22 @@ On Apple Silicon, optional Metal Whisper support is available with `uv sync --ex
 The first voice request may download the configured Whisper model. `large-v3-turbo` gives
 better results but is large; use `WHISPER_MODEL=small` or `tiny` for a quicker local test.
 
-### 4. Start the backend
+### 3. Start both applications
 
-From `kan-scrape-back/`:
+From the repository root:
 
 ```bash
-uv run uvicorn app.main:app --reload
+pnpm dev
 ```
 
-The API runs at [http://localhost:8000](http://localhost:8000), with interactive docs at
-[http://localhost:8000/docs](http://localhost:8000/docs).
+This starts the backend at [http://localhost:8000](http://localhost:8000) and the frontend at
+the next available Vite port, normally [http://localhost:5173](http://localhost:5173). For LAN
+testing, use `pnpm dev:lan`. The API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
-### 5. Refresh and verify real events
+To run services separately, use `uv run uvicorn app.main:app --reload` in `kan-scrape-back/`
+and `pnpm install && pnpm dev` in `kan-scrape-front/`.
+
+### 4. Refresh and verify real events
 
 With the backend running, refresh all configured sources:
 
@@ -114,46 +116,11 @@ curl -s 'http://localhost:8000/api/events?city=Kyoto&limit=10'
 The refresh response reports the count per source. A healthy real setup should show seed events
 and, when public feeds are reachable, Meetup events too.
 
-### 6. Install and start the frontend
-
-Open a second terminal from the repository root:
-
-```bash
-cd kan-scrape-front
-pnpm install
-pnpm dev
-```
-
-Open the Vite URL, normally [http://localhost:5173](http://localhost:5173). Ensure the backend
-is running and `CORS_ORIGINS` includes the frontend URL.
-
-After installing both applications, you can start the backend and frontend together from the
-repository root. If port 5173 is occupied, Vite automatically selects the next available port:
-
-```bash
-pnpm dev
-```
-
-For testing from a phone on the same Wi-Fi network:
-
-```bash
-pnpm dev:lan
-```
-
-Stop both services with `Ctrl+C`.
-
-To test from a phone on the same Wi-Fi network, start Vite on the LAN interface:
-
-```bash
-pnpm dev -- --host 0.0.0.0
-```
-
-Then set the computer's LAN address in `kan-scrape-back/.env`, for example
+For phone testing, set the computer's LAN address in `kan-scrape-back/.env`, for example
 `CORS_ORIGINS=http://192.168.1.20:5173`, restart the backend, and open
-`http://192.168.1.20:5173` on the phone. Do not use `localhost` on the phone because it refers
-to the phone itself.
+`http://192.168.1.20:5173` on the phone. Do not use `localhost` on the phone.
 
-### 7. Run the checks
+### 5. Run the checks
 
 ```bash
 cd kan-scrape-back
