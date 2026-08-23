@@ -10,6 +10,7 @@ build/
 
 # Logs and local environment
 *.log
+kan-scrape-back/logs/
 *.local
 .env
 .env.*

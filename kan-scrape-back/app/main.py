@@ -15,6 +15,7 @@ from fastapi.middleware import cors
 
 from app.api import router
 from app.core import config
+from app.core.logging import configure_logging
 from app.services import events as event_service
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,7 @@ async def lifespan(app: fastapi.FastAPI) -> abc.AsyncIterator[None]:
 
 def create_app() -> fastapi.FastAPI:
     settings = config.get_settings()
-    logging.basicConfig(level=logging.DEBUG if settings.debug else logging.INFO)
+    configure_logging(settings)
     app = fastapi.FastAPI(
         title=settings.app_name,
         version=settings.version,
