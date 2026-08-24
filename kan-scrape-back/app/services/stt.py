@@ -377,6 +377,7 @@ class SpeechToText:
 
         # Whisper segments already carry their leading space — a separator would double it.
         text = "".join(segment.text for segment in segments).strip()
+        logger.info("Whisper heard %r", text)
         return Transcript(
             text=text,
             language=getattr(info, "language", None),

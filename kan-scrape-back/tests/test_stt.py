@@ -62,7 +62,7 @@ def _install(monkeypatch: pytest.MonkeyPatch, factory: Any) -> None:
 
 
 async def test_transcribe_joins_segments_and_passes_language(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     models: list[FakeModel] = []
 
@@ -79,6 +79,7 @@ async def test_transcribe_joins_segments_and_passes_language(
     assert result == stt.Transcript(
         text="I want a Python meetup in Kyoto.", language="en", duration_s=3.2, provider="whisper"
     )
+    assert "Whisper heard 'I want a Python meetup in Kyoto.'" in caplog.text
     assert service.ready is True
     call = models[0].calls[-1]  # [0] is the silent priming pass done at load time
     assert call["beam_size"] == 1 and call["vad_filter"] is True and call["language"] is None
