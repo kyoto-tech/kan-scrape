@@ -68,6 +68,13 @@ class Settings(pydantic_settings.BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @pydantic.field_validator("meetup_groups", mode="after")
+    @classmethod
+    def empty_meetup_groups(cls, value: list[str]) -> list[str]:
+        # An empty MEETUP_GROUPS= must mean "scrape every known group", not "meetup off"
+        # (disable sources with FETCH_REMOTE_SOURCES=false instead).
+        return value or DEFAULT_MEETUP_GROUPS
+
     @pydantic.field_validator("seed_events", mode="before")
     @classmethod
     def empty_seed_events(cls, value: object) -> object:

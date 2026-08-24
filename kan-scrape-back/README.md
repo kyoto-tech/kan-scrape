@@ -111,7 +111,7 @@ Settings come from the environment or `.env` (see `.env.example`).
 | `SEED_EVENTS`           | follows `DEBUG`                | `true` → serve the fictional demo fixture      |
 | `DOORKEEPER_TOKEN`      | —                              | Enables the Doorkeeper adapter                 |
 | `CONNPASS_API_KEY`      | —                              | Enables the Connpass adapter                   |
-| `MEETUP_GROUPS`         | 9 verified Kansai slugs        | Comma-separated meetup.com group slugs         |
+| `MEETUP_GROUPS`         | 10 verified Kansai slugs       | Comma-separated meetup.com group slugs; empty = the full default list |
 | `HTTP_TIMEOUT_S`        | `10`                           | Per-request timeout for source adapters        |
 | `MAX_EVENTS_FOR_LLM`    | `40`                           | Events shown to the model per match            |
 | `FETCH_REMOTE_SOURCES`  | `true`                         | `false` → fully offline (pair with `SEED_EVENTS=true` to still serve events) |
