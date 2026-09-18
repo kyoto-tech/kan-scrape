@@ -73,7 +73,10 @@ and `/api/transcribe` can answer 503 (the frontend then falls back to browser `s
 
 ## Event sources
 
-Adapters live in `app/sources/`, all fail soft (log + return `[]`) and run concurrently:
+Adapters live in `app/sources/`, all fail soft (log + return `[]`) and run concurrently. The
+Meetup, Doorkeeper and Connpass fetching and parsing is not here: it lives in the agent skill's
+`skills/kansai-events/scripts/kansai_events.py`, loaded by `app/sources/scraper.py`, so the app
+and the skill share one scraper.
 
 | Source          | Key needed          | Notes                                                        |
 |-----------------|---------------------|--------------------------------------------------------------|
@@ -133,6 +136,6 @@ kan-scrape-back/
 │   │   ├── matcher.py      # Mistral function calling (`pick_events`) + random fallback
 │   │   ├── stt.py          # Speech-to-text (owned by the STT agent)
 │   │   └── tts.py          # edge-tts synthesis with a sha1 cache
-│   └── sources/            # base, seed, meetup_ical, doorkeeper, connpass
+│   └── sources/            # base, seed, scraper (skill loader), meetup_ical, doorkeeper, connpass
 └── tests/
 ```

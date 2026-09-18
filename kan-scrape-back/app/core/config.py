@@ -4,19 +4,10 @@ from typing import Annotated
 import pydantic
 import pydantic_settings
 
-# Live-verified public iCal feeds (HTTP 200 + VCALENDAR), busiest first.
-DEFAULT_MEETUP_GROUPS = [
-    "kyoto-tech-meetup",
-    "local-kyoto-english-meetup",
-    "osaka-web-designers-and-developers-meetup",
-    "entrepreneurs_tech_ai-careers_venture_capital",
-    "osaka-friends-english-japanese-language-exchange",
-    "kyoto-language-interaction",
-    "kansaihikes",
-    "Hacker-News-Kansai",
-    "osaka-coffee-and-tech-morning",
-    "Kyoto-Language-Lovers",
-]
+from app.sources import scraper
+
+# Single source of truth: the kansai-events skill's scraper.
+DEFAULT_MEETUP_GROUPS = list(scraper.kansai_events.DEFAULT_MEETUP_GROUPS)
 
 
 class Settings(pydantic_settings.BaseSettings):

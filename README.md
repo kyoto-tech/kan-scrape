@@ -22,15 +22,52 @@ event sources, and uses Mistral to select the best matches.
   </tr>
 </table>
 
+## Two ways to use it
+
+| | App | Agent skill |
+|---|---|---|
+| What you get | Web page: speak, get matching events with a spoken pitch | Your coding agent (Claude Code, Codex, …) scrapes the same sources and picks events for you |
+| Needs | Python, uv, Node.js, pnpm, ffmpeg, Mistral API key, local Whisper | uv only |
+| Install | [Set up the app](#set-up-the-app-step-by-step) | [Install the skill](#install-the-skill) |
+
+Both run the same scraper code (`skills/kansai-events/scripts/kansai_events.py`) over the same
+sources: Meetup iCal feeds (no key), Doorkeeper and Connpass (optional keys).
+
 ## Repository structure
 
 ```text
 kan-scrape/
-├── kan-scrape-front/   # React + TypeScript + Vite application
-└── kan-scrape-back/    # FastAPI API, transcription, matching and event sources
+├── kan-scrape-front/        # React + TypeScript + Vite application
+├── kan-scrape-back/         # FastAPI API, transcription, matching and event sources
+└── skills/kansai-events/    # Agent skill; its script is the event scraper the backend also uses
 ```
 
-## Setup, step by step
+## Install the skill
+
+The skill is self-contained: `SKILL.md` plus one `uv` script that declares its own
+dependencies. Install [uv](https://docs.astral.sh/uv/), then either use the
+[skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add kyoto-tech/kan-scrape --skill kansai-events -g
+```
+
+or copy the folder into your agent's skill directory:
+
+```bash
+git clone https://github.com/kyoto-tech/kan-scrape
+cp -r kan-scrape/skills/kansai-events ~/.claude/skills/    # Codex: ~/.agents/skills/
+```
+
+Then ask your agent something like "any Python meetups in Kyoto this week?". To use Doorkeeper
+and Connpass as well, export `DOORKEEPER_TOKEN` / `CONNPASS_API_KEY` in the agent's
+environment. The script also runs on its own:
+
+```bash
+skills/kansai-events/scripts/kansai_events.py --days 7 --format md
+```
+
+## Set up the app, step by step
 
 ### 1. Install requirements
 
@@ -127,6 +164,7 @@ cd kan-scrape-back
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy app
 
 cd ../kan-scrape-front
 pnpm lint

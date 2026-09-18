@@ -4,6 +4,8 @@
 
 `kan-scrape` is a monorepo for the Kyoto Tech Meetup community experience. The frontend lives in `kan-scrape-front/`, the backend (FastAPI) in `kan-scrape-back/`.
 
+`skills/kansai-events/scripts/kansai_events.py` is the single source of truth for event scraping (Meetup, Doorkeeper, Connpass fetching and parsing, the normalisation helpers, the default Meetup groups). The agent skill runs it standalone; the backend loads it through `kan-scrape-back/app/sources/scraper.py`, and the adapters only wrap it and convert to the pydantic `Event`. Change scraping logic in the script, keep it importable (no side effects at import) and limited to `httpx` + `icalendar`, and run the backend tests: they cover it. The backend therefore runs only from a repo checkout, not as a standalone wheel.
+
 Read [`DESIGN.md`](./DESIGN.md) before changing visual tokens, typography, colors, spacing, responsive behavior, or interaction states. Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before contributing.
 
 ## Current stack
