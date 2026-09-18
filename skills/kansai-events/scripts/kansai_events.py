@@ -5,10 +5,10 @@
 # ///
 """Scrape upcoming Kansai (Kyoto/Osaka/Kobe/Nara) events from Meetup, Doorkeeper, Connpass.
 
-Standalone port of kan-scrape-back/app/sources (plus the default Meetup groups from
-app/core/config.py) so the scraper runs without the app. Keep the two in sync when a source
-changes. Every source fails soft: a dead feed contributes 0 events and a line on stderr, never
-an exception.
+Single source of truth for Kan Scrape's event scraping: the backend (kan-scrape-back/app/sources)
+loads this file and wraps it, so it must stay importable (no side effects at import) and
+depend only on httpx and icalendar. Every source fails soft: a dead feed contributes 0 events
+and a log line, never an exception.
 """
 
 import argparse
@@ -17,14 +17,18 @@ import dataclasses
 import datetime
 import hashlib
 import json
+import logging
 import os
 import re
 import sys
 import zoneinfo
-from typing import Any
+from collections import abc
+from typing import Any, Protocol, TypeVar
 
 import httpx
 import icalendar
+
+logger = logging.getLogger("kansai_events")
 
 JST = zoneinfo.ZoneInfo("Asia/Tokyo")
 
@@ -85,10 +89,6 @@ class Event:
 # --- helpers ---------------------------------------------------------------------------------
 
 
-def log(msg: str) -> None:
-    print(msg, file=sys.stderr)
-
-
 def now_jst() -> datetime.datetime:
     return datetime.datetime.now(tz=JST)
 
@@ -147,11 +147,12 @@ def http_url(value: Any) -> str | None:
 # --- sources ---------------------------------------------------------------------------------
 
 
-def parse_meetup_ical(payload: bytes, slug: str) -> list[Event]:
+def parse_meetup_ical(payload: str | bytes, slug: str = "meetup") -> list[Event]:
+    """Parse a Meetup iCal feed. Never raises: a bad feed yields []."""
     try:
         calendar = icalendar.Calendar.from_ical(payload)
     except Exception:  # noqa: BLE001 - any parser failure means "no events"
-        log(f"meetup {slug}: unparseable iCal feed")
+        logger.warning("meetup %s: unparseable iCal feed", slug)
         return []
     # Meetup VEVENTs often lack LOCATION; the calendar name and slug are the fallback hints.
     group_name = str(calendar.get("X-WR-CALNAME") or calendar.get("NAME") or "")
@@ -184,7 +185,7 @@ def parse_meetup_ical(payload: bytes, slug: str) -> list[Event]:
                 )
             )
         except Exception as exc:  # noqa: BLE001 - skip the bad row, keep the feed
-            log(f"meetup {slug}: skipping malformed VEVENT ({exc})")
+            logger.warning("meetup %s: skipping malformed VEVENT (%s)", slug, exc)
     return events
 
 
@@ -196,10 +197,10 @@ async def fetch_meetup(client: httpx.AsyncClient, slugs: list[str]) -> list[Even
                 headers={"User-Agent": USER_AGENT, "Accept": "text/calendar,*/*"},
             )
         except httpx.HTTPError as exc:
-            log(f"meetup {slug}: {type(exc).__name__}")
+            logger.warning("meetup %s: %s", slug, type(exc).__name__)
             return []
         if resp.status_code != 200:
-            log(f"meetup {slug}: HTTP {resp.status_code}")
+            logger.info("meetup %s: HTTP %s", slug, resp.status_code)
             return []
         return parse_meetup_ical(resp.content, slug)
 
@@ -207,34 +208,41 @@ async def fetch_meetup(client: httpx.AsyncClient, slugs: list[str]) -> list[Even
     return [event for batch in results for event in batch]
 
 
-def parse_doorkeeper(payload: Any, prefecture: str) -> list[Event]:
+def parse_doorkeeper(payload: Any, prefecture: str | None = None) -> list[Event]:
+    """Parse a Doorkeeper `[{"event": {...}}, ...]` payload. Never raises."""
+    if not isinstance(payload, list):
+        logger.warning("doorkeeper: unexpected payload type %s", type(payload).__name__)
+        return []
     events = []
-    for entry in payload if isinstance(payload, list) else []:
-        raw = entry.get("event") if isinstance(entry, dict) else None
-        if not isinstance(raw, dict):
-            continue
-        title = raw.get("title")
-        starts_at = parse_iso(raw.get("starts_at"))
-        if not title or starts_at is None:
-            continue
-        location = raw.get("venue_name") or raw.get("address")
-        description = clean_text(raw.get("description"))
-        events.append(
-            Event(
-                id=make_id("doorkeeper", raw.get("id") or f"{title}|{starts_at.isoformat()}"),
-                title=title,
-                starts_at=starts_at,
-                ends_at=parse_iso(raw.get("ends_at")),
-                location=clean_text(location, limit=200),
-                url=http_url(raw.get("public_url")),
-                source="doorkeeper",
-                description=description,
-                city=guess_city(location, raw.get("address"), title)
-                or DOORKEEPER_PREFECTURES[prefecture],
-                tags=["doorkeeper", prefecture],
-                lang=guess_lang(title, description),
+    for entry in payload:
+        try:
+            raw = entry.get("event") if isinstance(entry, dict) else None
+            if not isinstance(raw, dict):
+                continue
+            title = raw.get("title")
+            starts_at = parse_iso(raw.get("starts_at"))
+            if not title or starts_at is None:
+                continue
+            location = raw.get("venue_name") or raw.get("address")
+            description = clean_text(raw.get("description"))
+            events.append(
+                Event(
+                    id=make_id("doorkeeper", raw.get("id") or f"{title}|{starts_at.isoformat()}"),
+                    title=title,
+                    starts_at=starts_at,
+                    ends_at=parse_iso(raw.get("ends_at")),
+                    location=clean_text(location, limit=200),
+                    url=http_url(raw.get("public_url")),
+                    source="doorkeeper",
+                    description=description,
+                    city=guess_city(location, raw.get("address"), title)
+                    or DOORKEEPER_PREFECTURES.get(prefecture or "", "Other"),
+                    tags=["doorkeeper"] + ([prefecture] if prefecture else []),
+                    lang=guess_lang(title, description),
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001 - skip the bad row, keep the feed
+            logger.warning("doorkeeper: skipping malformed event (%s)", exc)
     return events
 
 
@@ -251,11 +259,11 @@ async def fetch_doorkeeper(client: httpx.AsyncClient, token: str) -> list[Event]
         try:
             resp = await client.get(DOORKEEPER_URL, params=params, headers=headers)
             if resp.status_code != 200:
-                log(f"doorkeeper {prefecture}: HTTP {resp.status_code}")
+                logger.info("doorkeeper %s: HTTP %s", prefecture, resp.status_code)
                 return []
             return parse_doorkeeper(resp.json(), prefecture)
         except (httpx.HTTPError, ValueError) as exc:
-            log(f"doorkeeper {prefecture}: {type(exc).__name__}")
+            logger.warning("doorkeeper %s: %s", prefecture, type(exc).__name__)
             return []
 
     results = await asyncio.gather(*(one(p) for p in DOORKEEPER_PREFECTURES))
@@ -263,33 +271,40 @@ async def fetch_doorkeeper(client: httpx.AsyncClient, token: str) -> list[Event]
 
 
 def parse_connpass(payload: Any) -> list[Event]:
+    """Parse a Connpass v2 `{"events": [...]}` payload. Never raises."""
+    if not isinstance(payload, dict):
+        logger.warning("connpass: unexpected payload type %s", type(payload).__name__)
+        return []
     events = []
-    for raw in payload.get("events") or [] if isinstance(payload, dict) else []:
-        if not isinstance(raw, dict):
-            continue
-        title = raw.get("title")
-        starts_at = parse_iso(raw.get("started_at"))
-        if not title or starts_at is None:
-            continue
-        location = raw.get("place") or raw.get("address")
-        description = clean_text(raw.get("catch") or raw.get("description"))
-        url = http_url(raw.get("event_url") or raw.get("url"))
-        events.append(
-            Event(
-                id=make_id("connpass", raw.get("id") or raw.get("event_id") or url or title),
-                title=title,
-                starts_at=starts_at,
-                ends_at=parse_iso(raw.get("ended_at")),
-                location=clean_text(location, limit=200),
-                url=url,
-                source="connpass",
-                description=description,
-                city=guess_city(location, raw.get("address"), title) or "Other",
-                tags=["connpass", "tech"],
-                lang=guess_lang(title, description),
-                image_url=http_url(raw.get("image_url")),
+    for raw in payload.get("events") or []:
+        try:
+            if not isinstance(raw, dict):
+                continue
+            title = raw.get("title")
+            starts_at = parse_iso(raw.get("started_at"))
+            if not title or starts_at is None:
+                continue
+            location = raw.get("place") or raw.get("address")
+            description = clean_text(raw.get("catch") or raw.get("description"))
+            url = http_url(raw.get("event_url") or raw.get("url"))
+            events.append(
+                Event(
+                    id=make_id("connpass", raw.get("id") or raw.get("event_id") or url or title),
+                    title=title,
+                    starts_at=starts_at,
+                    ends_at=parse_iso(raw.get("ended_at")),
+                    location=clean_text(location, limit=200),
+                    url=url,
+                    source="connpass",
+                    description=description,
+                    city=guess_city(location, raw.get("address"), title) or "Other",
+                    tags=["connpass", "tech"],
+                    lang=guess_lang(title, description),
+                    image_url=http_url(raw.get("image_url")),
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001 - skip the bad row, keep the feed
+            logger.warning("connpass: skipping malformed event (%s)", exc)
     return events
 
 
@@ -299,11 +314,11 @@ async def fetch_connpass(client: httpx.AsyncClient, api_key: str) -> list[Event]
     try:
         resp = await client.get(CONNPASS_URL, params=params, headers=headers)
         if resp.status_code != 200:
-            log(f"connpass: HTTP {resp.status_code}")
+            logger.info("connpass: HTTP %s", resp.status_code)
             return []
         return parse_connpass(resp.json())
     except (httpx.HTTPError, ValueError) as exc:
-        log(f"connpass: {type(exc).__name__}")
+        logger.warning("connpass: %s", type(exc).__name__)
         return []
 
 
@@ -321,33 +336,58 @@ async def scrape(args: argparse.Namespace) -> tuple[list[Event], dict[str, int]]
             if doorkeeper_token:
                 jobs["doorkeeper"] = fetch_doorkeeper(client, doorkeeper_token)
             else:
-                log("doorkeeper: skipped (no DOORKEEPER_TOKEN)")
+                logger.info("doorkeeper: skipped (no DOORKEEPER_TOKEN)")
         if "connpass" in args.sources:
             if connpass_key:
                 jobs["connpass"] = fetch_connpass(client, connpass_key)
             else:
-                log("connpass: skipped (no CONNPASS_API_KEY)")
+                logger.info("connpass: skipped (no CONNPASS_API_KEY)")
         results = await asyncio.gather(*jobs.values())
     per_source = {name: len(batch) for name, batch in zip(jobs, results, strict=True)}
     return [event for batch in results for event in batch], per_source
 
 
-def select(events: list[Event], args: argparse.Namespace) -> list[Event]:
-    """Filter to upcoming, sort, THEN dedupe: first occurrence wins, so a finished copy of an
-    event must not be allowed to shadow the upcoming one sharing its title and day."""
+class Dated(Protocol):
+    """Anything with a title and a start: this script's Event or the backend's pydantic one."""
+
+    title: str
+    starts_at: datetime.datetime
+
+
+E = TypeVar("E", bound=Dated)
+
+
+def normalise_title(title: str) -> str:
+    return _WS.sub(" ", title).strip().casefold()
+
+
+def upcoming(events: abc.Iterable[E], *, horizon_days: int | None = None) -> list[E]:
+    """Keep only events that have not started yet, sorted by start time."""
     now = now_jst()
-    horizon = now + datetime.timedelta(days=args.days) if args.days is not None else None
-    kept = sorted(
-        (e for e in events if e.starts_at >= now and (horizon is None or e.starts_at <= horizon)),
-        key=lambda e: e.starts_at,
-    )
+    limit = now + datetime.timedelta(days=horizon_days) if horizon_days is not None else None
+    kept = [e for e in events if e.starts_at >= now and (limit is None or e.starts_at <= limit)]
+    kept.sort(key=lambda e: e.starts_at)
+    return kept
+
+
+def dedupe(events: abc.Iterable[E]) -> list[E]:
+    """Drop duplicates sharing a normalised title and JST start date.
+
+    The *first* occurrence wins, so filter and sort before deduping, otherwise a finished copy
+    of an event can shadow the upcoming one that shares its title and day.
+    """
     seen: set[tuple[str, datetime.date]] = set()
     unique = []
-    for event in kept:
-        key = (_WS.sub(" ", event.title).strip().casefold(), event.starts_at.date())
+    for event in events:
+        key = (normalise_title(event.title), event.starts_at.astimezone(JST).date())
         if key not in seen:
             seen.add(key)
             unique.append(event)
+    return unique
+
+
+def select(events: list[Event], args: argparse.Namespace) -> list[Event]:
+    unique = dedupe(upcoming(events, horizon_days=args.days))
     if args.city:
         wanted = {c.casefold() for c in args.city}
         unique = [e for e in unique if e.city.casefold() in wanted]
@@ -396,13 +436,15 @@ def main() -> None:
     parser.add_argument("--format", choices=["json", "md"], default="json")
     parser.add_argument("--timeout", type=float, default=10.0, help="per-request seconds")
     args = parser.parse_args()
+    logging.basicConfig(level=logging.WARNING, format="%(message)s")
+    logger.setLevel(logging.INFO)
     # Windows consoles/pipes default to cp1252, which cannot encode Japanese titles.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
     events, per_source = asyncio.run(scrape(args))
     selected = select(events, args)
-    log(f"fetched {per_source}; {len(selected)} upcoming after filters")
+    logger.info("fetched %s; %d upcoming after filters", per_source, len(selected))
     if args.format == "md":
         print(to_markdown(selected))
     else:

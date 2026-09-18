@@ -1,9 +1,10 @@
 """Adapter parsing tests — pure string/JSON fixtures, no network."""
 
 import datetime
+import typing
 
 from app.schemas import event as event_schema
-from app.sources import base, connpass, doorkeeper, meetup_ical
+from app.sources import base, connpass, doorkeeper, meetup_ical, scraper
 from app.sources import seed as seed_source
 
 ICAL_FIXTURE = """BEGIN:VCALENDAR
@@ -230,3 +231,10 @@ def test_upcoming_with_zero_horizon_keeps_nothing_later() -> None:
     )
     assert base.upcoming([later], horizon_days=0) == []
     assert base.upcoming([later]) == [later]
+
+
+def test_scraper_vocabulary_matches_schema() -> None:
+    """The skill's scraper and the API schema must agree on cities and timezone."""
+    kansai_events = scraper.kansai_events
+    assert set(kansai_events.CITIES) == set(typing.get_args(event_schema.City))
+    assert kansai_events.JST == event_schema.JST

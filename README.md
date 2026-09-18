@@ -30,8 +30,8 @@ event sources, and uses Mistral to select the best matches.
 | Needs | Python, uv, Node.js, pnpm, ffmpeg, Mistral API key, local Whisper | uv only |
 | Install | [Set up the app](#set-up-the-app-step-by-step) | [Install the skill](#install-the-skill) |
 
-Both use the same event sources: Meetup iCal feeds (no key), Doorkeeper and Connpass (optional
-keys).
+Both run the same scraper code (`skills/kansai-events/scripts/kansai_events.py`) over the same
+sources: Meetup iCal feeds (no key), Doorkeeper and Connpass (optional keys).
 
 ## Repository structure
 
@@ -39,7 +39,7 @@ keys).
 kan-scrape/
 ├── kan-scrape-front/        # React + TypeScript + Vite application
 ├── kan-scrape-back/         # FastAPI API, transcription, matching and event sources
-└── skills/kansai-events/    # Standalone agent skill: the event scraper without the app
+└── skills/kansai-events/    # Agent skill; its script is the event scraper the backend also uses
 ```
 
 ## Install the skill
