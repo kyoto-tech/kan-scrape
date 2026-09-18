@@ -4,6 +4,8 @@
 
 `kan-scrape` is a monorepo for the Kyoto Tech Meetup community experience. The frontend lives in `kan-scrape-front/`, the backend (FastAPI) in `kan-scrape-back/`.
 
+`skills/kansai-events/` is a standalone agent skill that duplicates the backend's event sources (`kan-scrape-back/app/sources/`, default Meetup groups in `app/core/config.py`) in one `uv` script. When you change a source, apply the same change to `skills/kansai-events/scripts/kansai_events.py`.
+
 Read [`DESIGN.md`](./DESIGN.md) before changing visual tokens, typography, colors, spacing, responsive behavior, or interaction states. Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before contributing.
 
 ## Current stack
