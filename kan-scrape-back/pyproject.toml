@@ -29,6 +29,7 @@ mlx = ["mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'ar
 
 [dependency-groups]
 dev = [
+    "mypy>=2.3.1",
     "pytest-asyncio>=0.24",
     "pytest>=8.2",
     "ruff>=0.5",
@@ -51,6 +52,12 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.mypy]
 # The event scraper lives in the kansai-events skill; see app/sources/scraper.py.
 mypy_path = "../skills/kansai-events/scripts"
+
+[[tool.mypy.overrides]]
+# Untyped STT backends: faster-whisper ships no py.typed, mlx-whisper is Apple-only and
+# optional, and the nvidia CUDA wheels are a bare namespace package.
+module = ["faster_whisper", "faster_whisper.*", "mlx_whisper", "mlx_whisper.*", "nvidia", "nvidia.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

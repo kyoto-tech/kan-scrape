@@ -62,7 +62,7 @@ async def _in_daemon_thread(func: abc.Callable[[], object]) -> object:
     loop = asyncio.get_running_loop()
     future: asyncio.Future[object] = loop.create_future()
 
-    def _settle(setter: abc.Callable[[object], None], value: object) -> None:
+    def _settle[T](setter: abc.Callable[[T], None], value: T) -> None:
         if not future.done():
             setter(value)
 

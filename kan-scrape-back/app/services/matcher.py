@@ -187,8 +187,8 @@ def resolve_ids(
 ) -> list[event_schema.Event]:
     """Map model-returned ids onto real events, tolerating a dropped `source:` prefix."""
     by_suffix: dict[str, event_schema.Event] = {}
-    for eid, event in by_id.items():
-        by_suffix.setdefault(eid.split(":", 1)[-1], event)
+    for eid, known in by_id.items():
+        by_suffix.setdefault(eid.split(":", 1)[-1], known)
 
     chosen: list[event_schema.Event] = []
     for raw in event_ids:

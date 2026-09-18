@@ -164,6 +164,7 @@ cd kan-scrape-back
 uv run pytest -q
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy app
 
 cd ../kan-scrape-front
 pnpm lint
