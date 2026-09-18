@@ -12,6 +12,7 @@ import pathlib
 import sys
 from collections import abc
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pydantic
 
@@ -39,10 +40,14 @@ def _load() -> ModuleType:
     return module
 
 
-kansai_events = _load()
+if TYPE_CHECKING:
+    # Type checkers read the script directly (mypy_path in pyproject.toml).
+    import kansai_events
+else:
+    kansai_events = _load()
 
 
-def to_events(items: abc.Iterable[object]) -> list[event_schema.Event]:
+def to_events(items: abc.Iterable["kansai_events.Event"]) -> list[event_schema.Event]:
     """Convert scraper events to API events, dropping (not raising on) any that fail validation."""
     events: list[event_schema.Event] = []
     for item in items:

@@ -16,6 +16,7 @@ import asyncio
 import dataclasses
 import datetime
 import hashlib
+import io
 import json
 import logging
 import os
@@ -23,7 +24,7 @@ import re
 import sys
 import zoneinfo
 from collections import abc
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
 import httpx
 import icalendar
@@ -310,7 +311,7 @@ def parse_connpass(payload: Any) -> list[Event]:
 
 async def fetch_connpass(client: httpx.AsyncClient, api_key: str) -> list[Event]:
     headers = {"X-API-Key": api_key, "Accept": "application/json"}
-    params = {"prefecture": "kyoto,osaka,hyogo", "count": 100, "order": 2}
+    params: dict[str, str | int] = {"prefecture": "kyoto,osaka,hyogo", "count": 100, "order": 2}
     try:
         resp = await client.get(CONNPASS_URL, params=params, headers=headers)
         if resp.status_code != 200:
@@ -354,14 +355,11 @@ class Dated(Protocol):
     starts_at: datetime.datetime
 
 
-E = TypeVar("E", bound=Dated)
-
-
 def normalise_title(title: str) -> str:
     return _WS.sub(" ", title).strip().casefold()
 
 
-def upcoming(events: abc.Iterable[E], *, horizon_days: int | None = None) -> list[E]:
+def upcoming[E: Dated](events: abc.Iterable[E], *, horizon_days: int | None = None) -> list[E]:
     """Keep only events that have not started yet, sorted by start time."""
     now = now_jst()
     limit = now + datetime.timedelta(days=horizon_days) if horizon_days is not None else None
@@ -370,7 +368,7 @@ def upcoming(events: abc.Iterable[E], *, horizon_days: int | None = None) -> lis
     return kept
 
 
-def dedupe(events: abc.Iterable[E]) -> list[E]:
+def dedupe[E: Dated](events: abc.Iterable[E]) -> list[E]:
     """Drop duplicates sharing a normalised title and JST start date.
 
     The *first* occurrence wins, so filter and sort before deduping, otherwise a finished copy
@@ -439,8 +437,9 @@ def main() -> None:
     logging.basicConfig(level=logging.WARNING, format="%(message)s")
     logger.setLevel(logging.INFO)
     # Windows consoles/pipes default to cp1252, which cannot encode Japanese titles.
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8")
 
     events, per_source = asyncio.run(scrape(args))
     selected = select(events, args)

@@ -48,6 +48,10 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.mypy]
+# The event scraper lives in the kansai-events skill; see app/sources/scraper.py.
+mypy_path = "../skills/kansai-events/scripts"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
